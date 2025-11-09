@@ -6,6 +6,10 @@
 
 set -e
 
+# Clean up any old temp directories from previous runs
+rm -rf /tmp/trustarc-cli-lib-* 2>/dev/null || true
+rm -rf /tmp/trustarc-boilerplate-* 2>/dev/null || true
+
 # GitHub repository base URL for raw content
 REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main"
 
