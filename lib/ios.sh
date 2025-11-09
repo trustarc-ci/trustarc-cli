@@ -256,6 +256,12 @@ integrate_ios_cocoapods() {
     else
         echo ""
         print_error "pod install failed"
+        echo ""
+        print_warning "Possible causes:"
+        print_substep "The TrustArcConsentSDK.podspec file may not exist in the repository"
+        print_substep "Try checking the repository for the correct podspec name"
+        print_substep "You may need to manually edit the Podfile"
+        echo ""
         print_warning "Restoring original Podfile..."
         mv "$podfile.backup" "$podfile"
         return 1
