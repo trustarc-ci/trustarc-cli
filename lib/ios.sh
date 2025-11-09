@@ -127,7 +127,7 @@ integrate_ios_sdk() {
     echo ""
     print_step "What will be done:"
     if [ "$dep_manager" = "cocoapods" ]; then
-        print_substep "Add pod 'TrustArcConsentSDK/Core' to Podfile"
+        print_substep "Add pod 'TrustArcConsentSDK' to Podfile"
         print_substep "Run 'pod install' to install dependencies"
     else
         print_substep "Add TrustArcConsentSDK Swift Package to project"
@@ -174,7 +174,7 @@ integrate_ios_sdk() {
             print_substep "Verify TrustArcConsentSDK appears in Package Dependencies"
         else
             print_substep "Open your .xcworkspace file (NOT .xcodeproj)"
-            print_substep "Verify TrustArcConsentSDK/Core appears in Pods"
+            print_substep "Verify TrustArcConsentSDK appears in Pods"
         fi
         print_substep "Import and initialize the SDK in your app"
         echo ""
@@ -217,18 +217,18 @@ integrate_ios_cocoapods() {
     echo ""
 
     # Add pod to Podfile (before the final 'end')
-    print_step "Adding TrustArcConsentSDK/Core to Podfile..."
+    print_step "Adding TrustArcConsentSDK to Podfile..."
 
     # Use awk to add the pod before the last 'end'
     awk '
     /^end/ && !done {
-        print "  pod '\''TrustArcConsentSDK/Core'\''"
+        print "  pod '\''TrustArcConsentSDK'\''"
         done = 1
     }
     { print }
     ' "$podfile" > "$podfile.tmp" && mv "$podfile.tmp" "$podfile"
 
-    print_success "Added pod 'TrustArcConsentSDK/Core' to Podfile"
+    print_success "Added pod 'TrustArcConsentSDK' to Podfile"
     echo ""
 
     # Run pod install
