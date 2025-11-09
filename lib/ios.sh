@@ -324,9 +324,14 @@ create_ios_boilerplate() {
         fi
     done
 
-    # Get the directory where this script is located
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-    local boilerplate_source="$script_dir/TrustArcConsentImpl.swift"
+    # Use BOILERPLATE_PATH if set (from install.sh), otherwise look locally
+    local boilerplate_source="${BOILERPLATE_PATH}"
+
+    if [ -z "$boilerplate_source" ]; then
+        # Fallback to local file if BOILERPLATE_PATH not set
+        local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+        boilerplate_source="$script_dir/TrustArcConsentImpl.swift"
+    fi
 
     if [ ! -f "$boilerplate_source" ]; then
         print_error "Could not find boilerplate template at: $boilerplate_source"
