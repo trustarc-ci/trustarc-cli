@@ -324,23 +324,34 @@ create_ios_boilerplate() {
         fi
     done
 
-    # Use BOILERPLATE_PATH if set (from install.sh), otherwise look locally
-    local boilerplate_source="${BOILERPLATE_PATH}"
+    # Download boilerplate from GitHub
+    local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/main/TrustArcConsentImpl.swift"
+    local temp_boilerplate="/tmp/trustarc-boilerplate-$$.swift"
 
-    if [ -z "$boilerplate_source" ]; then
-        # Fallback to local file if BOILERPLATE_PATH not set
-        local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-        boilerplate_source="$script_dir/TrustArcConsentImpl.swift"
-    fi
+    echo ""
+    print_info "Downloading boilerplate from GitHub..."
 
-    if [ ! -f "$boilerplate_source" ]; then
-        print_error "Could not find boilerplate template at: $boilerplate_source"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$boilerplate_url" -o "$temp_boilerplate" || {
+            print_error "Failed to download boilerplate from GitHub"
+            return 1
+        }
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q "$boilerplate_url" -O "$temp_boilerplate" || {
+            print_error "Failed to download boilerplate from GitHub"
+            return 1
+        }
+    else
+        print_error "Neither curl nor wget is available"
         return 1
     fi
 
     # Append boilerplate to the file
     echo "" >> "$target_file"
-    cat "$boilerplate_source" >> "$target_file"
+    cat "$temp_boilerplate" >> "$target_file"
+
+    # Clean up temp file
+    rm -f "$temp_boilerplate"
 
     # Replace domain placeholder in the target file
     if [[ "$OSTYPE" == "darwin"* ]]; then

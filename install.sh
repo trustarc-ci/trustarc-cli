@@ -48,35 +48,6 @@ load_module() {
     fi
 }
 
-# Function to download boilerplate file
-download_boilerplate() {
-    local boilerplate_url="${REPO_BASE_URL}/TrustArcConsentImpl.swift"
-    local boilerplate_dest="$TMP_LIB_DIR/TrustArcConsentImpl.swift"
-
-    # Check if running from local git repo first
-    if [ -f "$(dirname "$0")/TrustArcConsentImpl.swift" ]; then
-        export BOILERPLATE_PATH="$(dirname "$0")/TrustArcConsentImpl.swift"
-        return 0
-    fi
-
-    # Download boilerplate to temp directory
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$boilerplate_url" -o "$boilerplate_dest" 2>/dev/null
-    elif command -v wget >/dev/null 2>&1; then
-        wget -q "$boilerplate_url" -O "$boilerplate_dest" 2>/dev/null
-    else
-        echo "Error: Neither curl nor wget is available."
-        exit 1
-    fi
-
-    if [ -f "$boilerplate_dest" ]; then
-        export BOILERPLATE_PATH="$boilerplate_dest"
-    else
-        echo "Error: Failed to download boilerplate file"
-        exit 1
-    fi
-}
-
 # Cleanup function
 cleanup() {
     if [ -d "$TMP_LIB_DIR" ]; then
@@ -94,9 +65,6 @@ load_module "github"
 load_module "download"
 load_module "ios"
 load_module "menu"
-
-# Download boilerplate file
-download_boilerplate
 
 # Main installation flow
 main() {
