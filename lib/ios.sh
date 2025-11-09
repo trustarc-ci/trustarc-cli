@@ -127,7 +127,7 @@ integrate_ios_sdk() {
     echo ""
     print_step "What will be done:"
     if [ "$dep_manager" = "cocoapods" ]; then
-        print_substep "Add pod 'TrustArcConsentSDK' to Podfile"
+        print_substep "Add TrustArcConsentSDK to Podfile with git URL and branch"
         print_substep "Run 'pod install' to install dependencies"
     else
         print_substep "Add TrustArcConsentSDK Swift Package to project"
@@ -211,24 +211,38 @@ integrate_ios_cocoapods() {
         fi
     fi
 
+    # Get token
+    if [ -z "$TRUSTARC_TOKEN" ]; then
+        print_error "TRUSTARC_TOKEN not found in environment"
+        return 1
+    fi
+
+    # Ask for branch
+    echo ""
+    read -p "Which branch/tag should be used? (default: release): " branch_name
+    branch_name=${branch_name:-release}
+
     # Backup Podfile
     cp "$podfile" "$podfile.backup"
     print_success "Created backup: Podfile.backup"
     echo ""
 
+    # Prepare git URL with token
+    local git_url="https://${TRUSTARC_TOKEN}@github.com/trustarc/trustarc-mobile-consent.git"
+
     # Add pod to Podfile (before the final 'end')
     print_step "Adding TrustArcConsentSDK to Podfile..."
 
     # Use awk to add the pod before the last 'end'
-    awk '
+    awk -v git_url="$git_url" -v branch="$branch_name" '
     /^end/ && !done {
-        print "  pod '\''TrustArcConsentSDK'\''"
+        printf "  pod '\''TrustArcConsentSDK'\'', :git => '\''%s'\'', :branch => '\''%s'\''\n", git_url, branch
         done = 1
     }
     { print }
     ' "$podfile" > "$podfile.tmp" && mv "$podfile.tmp" "$podfile"
 
-    print_success "Added pod 'TrustArcConsentSDK' to Podfile"
+    print_success "Added pod 'TrustArcConsentSDK' with git URL and branch: $branch_name"
     echo ""
 
     # Run pod install

@@ -47,7 +47,10 @@ The CLI supports:
 - CocoaPods
 - Swift 5.0+ and iOS 12.0+
 
-**CocoaPods**: Automatically adds `pod 'TrustArcConsentSDK'` to your Podfile and runs `pod install`
+**CocoaPods**: Automatically adds the pod with git URL and branch to your Podfile and runs `pod install`
+```ruby
+pod 'TrustArcConsentSDK', :git => 'https://TOKEN@github.com/...', :branch => 'release'
+```
 
 ### Integration Steps
 
