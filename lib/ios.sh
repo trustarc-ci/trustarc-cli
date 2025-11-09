@@ -112,11 +112,8 @@ integrate_ios_sdk() {
         read -p "Enter your TrustArc domain (default: $MAC_DOMAIN): " domain
         domain=${domain:-$MAC_DOMAIN}
     else
-        read -p "Enter your TrustArc domain (e.g., mac_trustarc.com): " domain
-        if [ -z "$domain" ]; then
-            print_error "Domain is required"
-            return 1
-        fi
+        read -p "Enter your TrustArc domain (default: mac_trustarc.com): " domain
+        domain=${domain:-mac_trustarc.com}
     fi
     save_config "MAC_DOMAIN" "$domain"
 
