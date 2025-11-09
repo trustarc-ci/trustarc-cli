@@ -164,7 +164,7 @@ download_sample_app() {
             ;;
     esac
 
-    local download_url="https://mobile-consent-staging.trustarc.com/api/platform/${platform_type}/${domain}/download?website=${website}"
+    local download_url="https://mobile-consent.trustarc.com/api/platform/${platform_type}/${domain}/download?website=${website}"
     local output_file="trustarc-sample-${platform_type}.zip"
     local extract_dir="trustarc-sample-${platform_type}"
 

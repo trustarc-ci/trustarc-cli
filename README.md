@@ -11,26 +11,59 @@ A command-line installer for integrating the TrustArc Mobile Consent SDK into yo
 - **Platform Detection**: Auto-detects your project configuration
 - **Git-Safe**: Validates git status before making changes
 
-## Quick Start
+## Installation
 
-Run the installer with a single command:
+### Method 1: Run from URL (Recommended)
+
+Run the installer directly from GitHub:
 
 ```bash
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
 ```
 
-Or with wget:
+### Method 2: Run with Cache Bypass
+
+If you need the latest version and want to bypass any caching:
+
+```bash
+sh -c "$(curl -fsSL -H 'Cache-Control: no-cache, no-store, must-revalidate' https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
+```
+
+### Method 3: Using wget
+
+If you don't have curl installed:
 
 ```bash
 sh -c "$(wget https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh -O -)"
 ```
 
-## Requirements
+### Method 4: Clone and Run Locally
 
-- macOS or Linux
-- Xcode (for iOS integration)
-- Git (recommended)
-- GitHub Personal Access Token with access to TrustArc repositories
+For development or offline use:
+
+```bash
+git clone https://github.com/trustarc-ci/trustarc-cli.git
+cd trustarc-cli
+./install.sh
+```
+
+## Prerequisites
+
+Before running the installer, make sure you have:
+
+- **Operating System**: macOS or Linux
+- **Xcode**: Required for iOS integration (macOS only)
+- **Git**: Recommended for better change tracking
+- **GitHub Token**: Personal Access Token with `repo` and `read:package` scopes
+  - Create one at: https://github.com/settings/tokens
+  - Required scopes: `repo`, `read:package`
+  - Must have access to `trustarc/trustarc-mobile-consent` repository
+
+### CocoaPods Projects (Additional Requirements)
+
+If you're using CocoaPods:
+- **CocoaPods**: Install with `sudo gem install cocoapods`
+- **Ruby**: CocoaPods requires Ruby (usually pre-installed on macOS)
 
 ## What It Does
 
@@ -80,12 +113,71 @@ TrustArcConsentImpl.shared.openCm()
 
 ## Configuration
 
-The CLI stores configuration in `~/.trustarc-cli-config`:
-- GitHub token
+The CLI stores configuration in two places:
+
+### 1. Shell Configuration File
+Your GitHub token is saved to your shell configuration file:
+- **zsh**: `~/.zshrc`
+- **bash**: `~/.bashrc` or `~/.bash_profile`
+- **fish**: `~/.config/fish/config.fish`
+
+The token is exported as `TRUSTARC_TOKEN` environment variable.
+
+### 2. CLI Configuration File
+Project preferences are stored in `~/.trustarc-cli-config`:
 - Last used domain
 - Platform preferences
+- Other settings
 
-You can safely delete this file when no longer needed.
+## Cleanup
+
+To remove all CLI configuration and tokens:
+
+1. Run the installer again:
+   ```bash
+   sh -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
+   ```
+
+2. Select option **3) Clean up (remove token and config)**
+
+3. Restart your terminal for changes to take effect
+
+This will:
+- Remove `TRUSTARC_TOKEN` from your shell configuration
+- Delete `~/.trustarc-cli-config`
+- Create a backup of your shell config
+
+## Troubleshooting
+
+### "Token validation failed"
+- Verify your token has `repo` and `read:package` scopes
+- Ensure the token has access to `trustarc/trustarc-mobile-consent` repository
+- Try regenerating your GitHub token
+
+### "Could not detect platform type"
+- Make sure you're in a valid iOS project directory
+- Look for `.xcodeproj`, `.xcworkspace`, or `Podfile` files
+
+### "You have uncommitted changes"
+- Commit or stash your changes before running integration
+- Use `git status` to see uncommitted files
+- Run `git commit` or `git stash`
+
+### "Package does not appear in project.pbxproj" (SPM)
+- Close and reopen Xcode
+- Clean build folder (Cmd+Shift+K)
+- Verify the package appears in Package Dependencies tab
+
+### "pod install failed" (CocoaPods)
+- Verify the podspec exists in the repository
+- Check that CocoaPods is installed: `pod --version`
+- Try running `pod repo update`
+
+### Getting the latest version
+Use the cache-bypass command:
+```bash
+sh -c "$(curl -fsSL -H 'Cache-Control: no-cache, no-store, must-revalidate' https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
+```
 
 ## Support
 
