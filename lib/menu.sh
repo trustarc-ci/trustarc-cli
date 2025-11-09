@@ -116,17 +116,32 @@ cleanup_trustarc() {
     # Remove config file
     echo ""
     print_step "Removing configuration file..."
-    if [ -f "$CONFIG_FILE" ]; then
-        rm -f "$CONFIG_FILE"
-        print_success "Configuration file removed: $CONFIG_FILE"
+    local config_path="$HOME/.trustarc-cli-config"
+    if [ -f "$config_path" ]; then
+        rm -f "$config_path"
+        if [ -f "$config_path" ]; then
+            print_error "Failed to remove configuration file: $config_path"
+        else
+            print_success "Configuration file removed: $config_path"
+        fi
     else
-        print_info "No configuration file found"
+        print_info "No configuration file found at: $config_path"
     fi
 
     echo ""
     print_success "Cleanup completed"
     echo ""
-    print_warning "Please restart your terminal or run: source $shell_rc"
+    print_divider
+    echo ""
+    print_warning "IMPORTANT: You MUST restart your terminal"
+    echo ""
+    print_substep "The token has been removed from: $shell_rc"
+    print_substep "The config file has been deleted: $config_path"
+    echo ""
+    print_substep "However, your CURRENT terminal session still has the token in memory"
+    print_substep "Close this terminal and open a new one for changes to take effect"
+    echo ""
+    print_divider
     echo ""
     read -p "Press enter to exit..."
     exit 0
