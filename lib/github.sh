@@ -102,27 +102,3 @@ save_to_env() {
 
     save_config "TRUSTARC_TOKEN" "$token"
 }
-
-# Save token to .netrc
-save_to_netrc() {
-    local token=$1
-    local netrc_file="$HOME/.netrc"
-
-    # Create or update .netrc
-    if [ -f "$netrc_file" ]; then
-        # Remove existing github.com entry if present
-        sed -i.bak '/machine github.com/,/^$/d' "$netrc_file" 2>/dev/null || true
-    fi
-
-    echo "" >> "$netrc_file"
-    echo "machine github.com" >> "$netrc_file"
-    echo "  login $token" >> "$netrc_file"
-    echo "  password x-oauth-basic" >> "$netrc_file"
-    echo "" >> "$netrc_file"
-
-    # Set proper permissions
-    chmod 600 "$netrc_file"
-
-    print_success "Token added to $netrc_file"
-    save_config "TRUSTARC_TOKEN" "$token"
-}

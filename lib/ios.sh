@@ -234,8 +234,6 @@ integrate_ios_spm() {
     echo ""
     printf "  ${GREEN}%s${NC}\n" "$repo_url"
     echo ""
-    print_warning "Keep this URL private - do not share or commit it"
-    echo ""
     print_divider
     echo ""
 

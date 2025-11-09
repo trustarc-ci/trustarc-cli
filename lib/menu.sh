@@ -11,9 +11,10 @@ show_main_menu() {
     echo ""
     echo "  ${BOLD}1${NC}) Integrate SDK into project"
     echo "  ${BOLD}2${NC}) Download sample application"
-    echo "  ${BOLD}3${NC}) Exit"
+    echo "  ${BOLD}3${NC}) Clean up (remove token and config)"
+    echo "  ${BOLD}4${NC}) Exit"
     echo ""
-    read -p "Enter your choice (1-3): " main_choice
+    read -p "Enter your choice (1-4): " main_choice
 
     case "$main_choice" in
         1)
@@ -23,9 +24,12 @@ show_main_menu() {
             download_sample_menu
             ;;
         3)
+            cleanup_trustarc
+            ;;
+        4)
             echo ""
             print_info "Configuration saved to: $CONFIG_FILE"
-            print_substep "You can delete this file when you no longer need it"
+            print_substep "Run option 3 to clean up when you no longer need it"
             echo ""
             exit 0
             ;;
@@ -34,6 +38,98 @@ show_main_menu() {
             show_main_menu
             ;;
     esac
+}
+
+# Clean up TrustArc configuration and token
+cleanup_trustarc() {
+    print_header "Clean Up TrustArc Configuration"
+
+    echo "This will remove:"
+    echo ""
+    print_substep "TRUSTARC_TOKEN from your shell configuration"
+    print_substep "Configuration file: $CONFIG_FILE"
+    echo ""
+    print_warning "This action cannot be undone"
+    echo ""
+    read -p "Are you sure you want to continue? (y/n): " confirm
+
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        print_info "Cleanup cancelled"
+        echo ""
+        read -p "Press enter to return to main menu..."
+        show_main_menu
+        return
+    fi
+
+    echo ""
+    print_step "Removing token from shell configuration..."
+
+    # Detect shell config file
+    local shell_rc=""
+    case "$SHELL" in
+        */zsh)
+            shell_rc="$HOME/.zshrc"
+            ;;
+        */bash)
+            if [ -f "$HOME/.bashrc" ]; then
+                shell_rc="$HOME/.bashrc"
+            else
+                shell_rc="$HOME/.bash_profile"
+            fi
+            ;;
+        */fish)
+            shell_rc="$HOME/.config/fish/config.fish"
+            ;;
+        *)
+            if [ -f "$HOME/.zshrc" ]; then
+                shell_rc="$HOME/.zshrc"
+            elif [ -f "$HOME/.bashrc" ]; then
+                shell_rc="$HOME/.bashrc"
+            elif [ -f "$HOME/.bash_profile" ]; then
+                shell_rc="$HOME/.bash_profile"
+            else
+                shell_rc="$HOME/.profile"
+            fi
+            ;;
+    esac
+
+    # Remove TRUSTARC_TOKEN from shell config
+    if [ -f "$shell_rc" ]; then
+        # Create backup
+        cp "$shell_rc" "$shell_rc.trustarc-backup"
+
+        # Remove the token lines
+        if grep -q "TRUSTARC_TOKEN" "$shell_rc"; then
+            # Remove the comment line and export line
+            sed -i.bak '/# TrustArc GitHub Token/d' "$shell_rc" 2>/dev/null || sed -i '/# TrustArc GitHub Token/d' "$shell_rc"
+            sed -i.bak '/export TRUSTARC_TOKEN/d' "$shell_rc" 2>/dev/null || sed -i '/export TRUSTARC_TOKEN/d' "$shell_rc"
+            # Remove backup file created by sed
+            rm -f "$shell_rc.bak"
+            print_success "Token removed from $shell_rc"
+            print_substep "Backup created at: $shell_rc.trustarc-backup"
+        else
+            print_info "No TRUSTARC_TOKEN found in $shell_rc"
+            rm -f "$shell_rc.trustarc-backup"
+        fi
+    fi
+
+    # Remove config file
+    echo ""
+    print_step "Removing configuration file..."
+    if [ -f "$CONFIG_FILE" ]; then
+        rm -f "$CONFIG_FILE"
+        print_success "Configuration file removed: $CONFIG_FILE"
+    else
+        print_info "No configuration file found"
+    fi
+
+    echo ""
+    print_success "Cleanup completed"
+    echo ""
+    print_warning "Please restart your terminal or run: source $shell_rc"
+    echo ""
+    read -p "Press enter to exit..."
+    exit 0
 }
 
 # Integrate SDK

@@ -116,34 +116,9 @@ main() {
     # Step 3: Save token
     if [ "$TRUSTARC_TOKEN" != "$github_token" ]; then
         echo ""
-        print_step "Token Storage Options"
+        print_step "Saving token to environment variable"
         echo ""
-        echo "  ${BOLD}[1]${NC} Environment Variable (TRUSTARC_TOKEN)"
-        print_substep "Stored in your shell configuration file (~/.zshrc, ~/.bashrc, etc.)"
-        print_substep "Available as an environment variable in your terminal sessions"
-        print_substep "Easy to use with command-line tools and scripts"
-        print_substep "Can be accessed via \$TRUSTARC_TOKEN"
-        echo ""
-        echo "  ${BOLD}[2]${NC} .netrc File"
-        print_substep "Stored in ~/.netrc (secure file with restricted permissions)"
-        print_substep "Automatically used by curl, wget, and git for authentication"
-        print_substep "More secure (file permissions set to 600)"
-        print_substep "Works across multiple tools without explicit configuration"
-        echo ""
-        read -p "Select option (1-2): " storage_choice
-
-        case "$storage_choice" in
-            1)
-                save_to_env "$github_token"
-                ;;
-            2)
-                save_to_netrc "$github_token"
-                ;;
-            *)
-                print_warning "Invalid choice, defaulting to environment variable"
-                save_to_env "$github_token"
-                ;;
-        esac
+        save_to_env "$github_token"
 
         # Export for current session
         export TRUSTARC_TOKEN="$github_token"
