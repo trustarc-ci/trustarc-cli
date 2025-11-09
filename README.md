@@ -6,7 +6,7 @@ A command-line installer for integrating the TrustArc Mobile Consent SDK into yo
 
 - **Automated SDK Integration**: Streamlined installation process for iOS projects
 - **Swift Package Manager Support**: Easy integration with SPM-based projects
-- **CocoaPods Support**: Coming soon
+- **CocoaPods Support**: Automatic Podfile modification and pod install
 - **Sample Implementation**: Automatic boilerplate code generation
 - **Platform Detection**: Auto-detects your project configuration
 - **Git-Safe**: Validates git status before making changes
@@ -44,8 +44,10 @@ sh -c "$(wget https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/he
 
 The CLI supports:
 - Swift Package Manager (SPM)
-- CocoaPods (coming soon)
+- CocoaPods
 - Swift 5.0+ and iOS 12.0+
+
+**CocoaPods**: Automatically adds `pod 'TrustArcConsentSDK/Core'` to your Podfile and runs `pod install`
 
 ### Integration Steps
 

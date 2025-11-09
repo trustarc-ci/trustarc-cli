@@ -127,15 +127,15 @@ integrate_ios_sdk() {
     echo ""
     print_step "What will be done:"
     if [ "$dep_manager" = "cocoapods" ]; then
-        print_substep "Add TrustArcConsentSDK to Podfile"
-        print_substep "Run 'pod install'"
+        print_substep "Add pod 'TrustArcConsentSDK/Core' to Podfile"
+        print_substep "Run 'pod install' to install dependencies"
     else
         print_substep "Add TrustArcConsentSDK Swift Package to project"
-        print_substep "Configure package with release branch"
+        print_substep "Configure package with specified branch"
     fi
     echo ""
     print_step "What will NOT be done:"
-    print_substep "No code modifications"
+    print_substep "No code modifications to your source files"
     print_substep "No build configuration changes"
     echo ""
     print_divider
@@ -169,11 +169,12 @@ integrate_ios_sdk() {
         print_success "iOS SDK integration completed"
         echo ""
         print_step "Next steps:"
-        print_substep "Open your Xcode project"
         if [ "$dep_manager" = "spm" ]; then
+            print_substep "Open your Xcode project"
             print_substep "Verify TrustArcConsentSDK appears in Package Dependencies"
         else
-            print_substep "Verify TrustArcConsentSDK appears in Pods"
+            print_substep "Open your .xcworkspace file (NOT .xcodeproj)"
+            print_substep "Verify TrustArcConsentSDK/Core appears in Pods"
         fi
         print_substep "Import and initialize the SDK in your app"
         echo ""
@@ -188,16 +189,66 @@ integrate_ios_cocoapods() {
     local domain=$2
 
     echo ""
-    print_info "Adding TrustArcConsentSDK to Podfile..."
+    print_step "Adding TrustArc SDK via CocoaPods"
+    echo ""
 
-    # TODO: Implement CocoaPods integration
-    print_warning "CocoaPods integration not yet implemented"
-    print_info "Please add the following to your Podfile manually:"
+    # Find Podfile
+    local podfile="$project_path/Podfile"
+
+    if [ ! -f "$podfile" ]; then
+        print_error "Podfile not found at: $podfile"
+        return 1
+    fi
+
+    # Check if TrustArcConsentSDK already exists in Podfile
+    if grep -q "TrustArcConsentSDK" "$podfile"; then
+        print_warning "TrustArcConsentSDK already exists in Podfile"
+        echo ""
+        read -p "Do you want to continue anyway? (y/n): " continue_choice
+        if [ "$continue_choice" != "y" ] && [ "$continue_choice" != "Y" ]; then
+            print_info "Installation cancelled"
+            return 1
+        fi
+    fi
+
+    # Backup Podfile
+    cp "$podfile" "$podfile.backup"
+    print_success "Created backup: Podfile.backup"
     echo ""
-    echo "  pod 'TrustArcConsentSDK'"
+
+    # Add pod to Podfile (before the final 'end')
+    print_step "Adding TrustArcConsentSDK/Core to Podfile..."
+
+    # Use awk to add the pod before the last 'end'
+    awk '
+    /^end/ && !done {
+        print "  pod '\''TrustArcConsentSDK/Core'\''"
+        done = 1
+    }
+    { print }
+    ' "$podfile" > "$podfile.tmp" && mv "$podfile.tmp" "$podfile"
+
+    print_success "Added pod 'TrustArcConsentSDK/Core' to Podfile"
     echo ""
-    print_info "Then run: pod install"
+
+    # Run pod install
+    print_step "Running pod install..."
     echo ""
+
+    cd "$project_path"
+    if pod install; then
+        echo ""
+        print_success "CocoaPods installation completed"
+    else
+        echo ""
+        print_error "pod install failed"
+        print_warning "Restoring original Podfile..."
+        mv "$podfile.backup" "$podfile"
+        return 1
+    fi
+
+    # Clean up backup
+    rm -f "$podfile.backup"
 
     return 0
 }
