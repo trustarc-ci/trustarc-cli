@@ -3,26 +3,195 @@
 # Android integration functions for TrustArc CLI
 # This file contains logic for Android SDK integration
 
-# Detect Android project language (Kotlin or Java)
-detect_android_language() {
+# Check if Android project has Kotlin support
+has_kotlin_support() {
     local project_path=$1
 
     # Check for Kotlin plugin in build.gradle files
-    local has_kotlin_plugin=false
     if grep -r "kotlin-android" "$project_path" --include="build.gradle*" >/dev/null 2>&1; then
-        has_kotlin_plugin=true
+        return 0
     fi
 
-    # Count Kotlin and Java files
+    # Check for Kotlin files
     local kotlin_count=$(find "$project_path" -name "*.kt" -not -path "*/build/*" 2>/dev/null | wc -l | tr -d ' ')
-    local java_count=$(find "$project_path" -name "*.java" -not -path "*/build/*" 2>/dev/null | wc -l | tr -d ' ')
-
-    # Determine primary language
-    if [ "$has_kotlin_plugin" = true ] || [ "$kotlin_count" -gt "$java_count" ]; then
-        echo "kotlin"
-    else
-        echo "java"
+    if [ "$kotlin_count" -gt 0 ]; then
+        return 0
     fi
+
+    return 1
+}
+
+# Load AGP-Kotlin compatibility data from GitHub
+load_agp_kotlin_compatibility() {
+    local json_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/main/lib/agp-kotlin-compatibility.json"
+    local temp_json="/tmp/trustarc-agp-kotlin-$$.json"
+
+    # Try to fetch from GitHub
+    if command -v curl >/dev/null 2>&1; then
+        if curl -fsSL "$json_url" -o "$temp_json" 2>/dev/null; then
+            cat "$temp_json"
+            rm -f "$temp_json"
+            return 0
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if wget -q "$json_url" -O "$temp_json" 2>/dev/null; then
+            cat "$temp_json"
+            rm -f "$temp_json"
+            return 0
+        fi
+    fi
+
+    # Fallback: check local file if GitHub fetch fails
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local json_file="$script_dir/agp-kotlin-compatibility.json"
+
+    if [ -f "$json_file" ]; then
+        cat "$json_file"
+        return 0
+    fi
+
+    # Return default if all methods fail
+    echo "1.9.+"
+    return 1
+}
+
+# Get recommended Kotlin version for AGP version from JSON data
+get_kotlin_for_agp() {
+    local agp_version=$1
+    local json_data=$2
+
+    # Extract major.minor from AGP version (e.g., "8.3.2" -> "8.3")
+    local agp_major_minor=$(echo "$agp_version" | cut -d. -f1-2)
+
+    # Use grep and sed to extract recommendedKotlin for matching agpVersion
+    local recommended=$(echo "$json_data" | grep -A3 "\"agpVersion\": \"$agp_major_minor\"" | grep "recommendedKotlin" | sed 's/.*: "\([^"]*\)".*/\1/' | head -1)
+
+    if [ -n "$recommended" ]; then
+        echo "$recommended"
+        return 0
+    fi
+
+    # If no exact match, try to find closest lower version
+    # Extract all AGP versions and sort them
+    local all_versions=$(echo "$json_data" | grep "\"agpVersion\":" | sed 's/.*: "\([^"]*\)".*/\1/')
+
+    # Find the highest version that's lower than or equal to the given AGP version
+    local closest_version=""
+    while IFS= read -r version; do
+        if [ "$(printf '%s\n' "$version" "$agp_major_minor" | sort -V | head -1)" = "$version" ]; then
+            closest_version="$version"
+        fi
+    done <<< "$all_versions"
+
+    if [ -n "$closest_version" ]; then
+        recommended=$(echo "$json_data" | grep -A3 "\"agpVersion\": \"$closest_version\"" | grep "recommendedKotlin" | sed 's/.*: "\([^"]*\)".*/\1/' | head -1)
+        if [ -n "$recommended" ]; then
+            echo "$recommended"
+            return 0
+        fi
+    fi
+
+    # Fallback to default
+    echo "$json_data" | grep "\"defaultRecommendation\":" | sed 's/.*: "\([^"]*\)".*/\1/'
+}
+
+# Cache for AGP-Kotlin compatibility data (avoid multiple fetches)
+AGP_KOTLIN_COMPATIBILITY_CACHE=""
+
+# Detect recommended Kotlin version for the project
+detect_kotlin_version() {
+    local project_path=$1
+
+    # Check libs.versions.toml first (existing Kotlin version has priority)
+    local version_catalog="$project_path/gradle/libs.versions.toml"
+    if [ -f "$version_catalog" ]; then
+        local kotlin_version=$(grep "^kotlin[[:space:]]*=" "$version_catalog" | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/')
+        if [ -n "$kotlin_version" ]; then
+            echo "$kotlin_version"
+            return 0
+        fi
+    fi
+
+    # Load compatibility data (use cache if available)
+    if [ -z "$AGP_KOTLIN_COMPATIBILITY_CACHE" ]; then
+        AGP_KOTLIN_COMPATIBILITY_CACHE=$(load_agp_kotlin_compatibility)
+        if [ $? -ne 0 ]; then
+            # Failed to load, use default
+            echo "1.9.+"
+            return 0
+        fi
+    fi
+
+    local json_data="$AGP_KOTLIN_COMPATIBILITY_CACHE"
+
+    # Check AGP version to recommend compatible Kotlin version
+    local agp_version=""
+
+    # Try to find AGP version in libs.versions.toml
+    if [ -f "$version_catalog" ]; then
+        agp_version=$(grep "^agp[[:space:]]*=" "$version_catalog" | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/')
+    fi
+
+    # If not in version catalog, check build.gradle files
+    if [ -z "$agp_version" ]; then
+        if [ -f "$project_path/build.gradle" ]; then
+            agp_version=$(grep "com.android.tools.build:gradle:" "$project_path/build.gradle" | sed "s/.*:\([0-9.]*\).*/\1/" | head -1)
+        fi
+    fi
+
+    # Get recommendation from JSON data
+    if [ -n "$agp_version" ]; then
+        local recommended=$(get_kotlin_for_agp "$agp_version" "$json_data")
+        echo "$recommended"
+    else
+        # No AGP found, use default
+        echo "$json_data" | grep "\"defaultRecommendation\":" | sed 's/.*: "\([^"]*\)".*/\1/'
+    fi
+}
+
+# Add Kotlin support to Android project
+add_kotlin_support() {
+    local project_path=$1
+
+    echo ""
+    print_warning "TrustArc SDK requires Kotlin"
+    print_info "Your project appears to be Java-only"
+    echo ""
+    read -p "Would you like to add Kotlin support to your project? (y/n): " add_kotlin
+
+    if [ "$add_kotlin" != "y" ] && [ "$add_kotlin" != "Y" ]; then
+        print_error "TrustArc SDK cannot be integrated without Kotlin support"
+        return 1
+    fi
+
+    # Detect recommended Kotlin version
+    local kotlin_version=$(detect_kotlin_version "$project_path")
+
+    echo ""
+    print_step "Adding Kotlin support to your project"
+    echo ""
+    print_info "Recommended Kotlin version: $kotlin_version"
+    echo ""
+    print_info "Please add the following to your project manually:"
+    echo ""
+    echo "${BOLD}1. In your project-level build.gradle (or settings.gradle):${NC}"
+    echo ""
+    echo "  plugins {"
+    echo "      id 'org.jetbrains.kotlin.android' version '$kotlin_version' apply false"
+    echo "  }"
+    echo ""
+    echo "${BOLD}2. In your app/build.gradle:${NC}"
+    echo ""
+    echo "  plugins {"
+    echo "      id 'com.android.application'"
+    echo "      id 'org.jetbrains.kotlin.android'"
+    echo "  }"
+    echo ""
+    print_divider
+    echo ""
+    read -p "Press Enter after adding Kotlin support to continue..."
+
+    return 0
 }
 
 # Verify Android project compatibility
@@ -280,22 +449,12 @@ ${dependency_entry}
 create_android_boilerplate() {
     local project_path=$1
     local domain=$2
-    local language=$3
 
-    local file_extension
-    local file_name
-
-    if [ "$language" = "kotlin" ]; then
-        file_extension="kt"
-        file_name="TrustArcConsentImpl.kt"
-    else
-        file_extension="java"
-        file_name="TrustArcConsentImpl.java"
-    fi
+    local file_name="TrustArcConsentImpl.kt"
 
     echo ""
-    print_step "Create a new $language file in Android Studio:"
-    print_substep "In Android Studio: File → New → $([[ $language == "kotlin" ]] && echo "Kotlin Class/File" || echo "Java Class")"
+    print_step "Create a new Kotlin file in Android Studio:"
+    print_substep "In Android Studio: File → New → Kotlin Class/File"
     print_substep "Name it: TrustArcConsentImpl"
     print_substep "Save it to your project (any package)"
     echo ""
@@ -324,7 +483,7 @@ create_android_boilerplate() {
 
     # Download boilerplate from GitHub
     local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/main/$file_name"
-    local temp_boilerplate="/tmp/trustarc-boilerplate-$$.$file_extension"
+    local temp_boilerplate="/tmp/trustarc-boilerplate-$$.kt"
 
     echo ""
     print_info "Downloading boilerplate from GitHub..."
@@ -371,34 +530,18 @@ create_android_boilerplate() {
     echo ""
     echo "${BOLD}In your Application class:${NC}"
     echo ""
-    if [ "$language" = "kotlin" ]; then
-        echo "  ${DIM}class MyApplication : Application() {${NC}"
-        echo "      ${DIM}override fun onCreate() {${NC}"
-        echo "          ${DIM}super.onCreate()${NC}"
-        echo "          ${GREEN}TrustArcConsentImpl.initialize(this)${NC}"
-        echo "      ${DIM}}${NC}"
-        echo "  ${DIM}}${NC}"
-    else
-        echo "  ${DIM}public class MyApplication extends Application {${NC}"
-        echo "      ${DIM}@Override${NC}"
-        echo "      ${DIM}public void onCreate() {${NC}"
-        echo "          ${DIM}super.onCreate();${NC}"
-        echo "          ${GREEN}TrustArcConsentImpl.getInstance().initialize(this);${NC}"
-        echo "      ${DIM}}${NC}"
-        echo "  ${DIM}}${NC}"
-    fi
+    echo "  ${DIM}class MyApplication : Application() {${NC}"
+    echo "      ${DIM}override fun onCreate() {${NC}"
+    echo "          ${DIM}super.onCreate()${NC}"
+    echo "          ${GREEN}TrustArcConsentImpl.initialize(this)${NC}"
+    echo "      ${DIM}}${NC}"
+    echo "  ${DIM}}${NC}"
     echo ""
     echo "${BOLD}To show the consent dialog:${NC}"
     echo ""
-    if [ "$language" = "kotlin" ]; then
-        echo "  ${DIM}Button(\"Manage Consent\") {${NC}"
-        echo "      ${GREEN}TrustArcConsentImpl.openCm()${NC}"
-        echo "  ${DIM}}${NC}"
-    else
-        echo "  ${DIM}button.setOnClickListener(v -> {${NC}"
-        echo "      ${GREEN}TrustArcConsentImpl.getInstance().openCm();${NC}"
-        echo "  ${DIM}});${NC}"
-    fi
+    echo "  ${DIM}Button(\"Manage Consent\") {${NC}"
+    echo "      ${GREEN}TrustArcConsentImpl.openCm()${NC}"
+    echo "  ${DIM}}${NC}"
     echo ""
     print_divider
     echo ""
@@ -412,10 +555,15 @@ integrate_android_sdk() {
 
     print_header "Android SDK Integration"
 
-    # Detect project language
-    local language=$(detect_android_language "$project_path")
+    # Check for Kotlin support
+    if ! has_kotlin_support "$project_path"; then
+        if ! add_kotlin_support "$project_path"; then
+            return 1
+        fi
+    else
+        print_success "Kotlin support detected"
+    fi
 
-    print_info "Detected language: $language"
     echo ""
 
     # Verify compatibility
@@ -456,12 +604,15 @@ integrate_android_sdk() {
     print_step "Integration Summary"
     echo ""
     print_substep "Domain: $domain"
-    print_substep "Language: $language"
+    print_substep "Language: Kotlin (required by TrustArc SDK)"
     echo ""
     print_step "What will be done:"
-    print_substep "Add TrustArc Maven repository to project build.gradle"
+    print_substep "Add TrustArc Maven repository to settings.gradle (dependencyResolutionManagement)"
     print_substep "Add TrustArc SDK dependency to app/build.gradle"
-    print_substep "Create implementation file (TrustArcConsentImpl.$([[ $language == "kotlin" ]] && echo "kt" || echo "java"))"
+    if [ -f "$project_path/gradle/libs.versions.toml" ]; then
+        print_substep "Update gradle/libs.versions.toml with SDK version"
+    fi
+    print_substep "Create implementation file (TrustArcConsentImpl.kt)"
     echo ""
     print_step "What will NOT be done:"
     print_substep "No Application class modifications"
@@ -566,7 +717,7 @@ integrate_android_sdk() {
     # Create boilerplate
     read -p "Would you like to create a sample implementation file? (y/n): " create_impl
     if [ "$create_impl" = "y" ] || [ "$create_impl" = "Y" ]; then
-        create_android_boilerplate "$project_path" "$domain" "$language"
+        create_android_boilerplate "$project_path" "$domain"
     fi
 
     echo ""

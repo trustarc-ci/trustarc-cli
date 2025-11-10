@@ -133,6 +133,7 @@ integrate_ios_sdk() {
         print_substep "Add TrustArcConsentSDK Swift Package to project"
         print_substep "Configure package with specified branch"
     fi
+    print_substep "Create implementation file (TrustArcConsentImpl.swift)"
     echo ""
     print_step "What will NOT be done:"
     print_substep "No code modifications to your source files"
