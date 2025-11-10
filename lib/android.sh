@@ -712,7 +712,8 @@ add_required_dependencies() {
     for dep in "${required_deps[@]}"; do
         IFS=':' read -r group name version default_alias <<< "$dep"
         local alias=$default_alias
-        local toml_ref="libs.$alias"
+        local gradle_ref_alias=$(echo "$alias" | tr '-' '.')
+		local toml_ref="libs.$gradle_ref_alias"
 
         if [ "$use_toml" = true ]; then
             # --- 0. CHECK FOR EXISTING ARTIFACT (GROUP:NAME) ---
@@ -731,7 +732,8 @@ add_required_dependencies() {
             if [ -n "$existing_alias" ]; then
                 # ARTIFACT EXISTS: Use the existing alias and skip adding library/version.
                 alias=$existing_alias
-                toml_ref="libs.$alias"
+				gradle_ref_alias=$(echo "$alias" | tr '-' '.')
+				toml_ref="libs.$gradle_ref_alias"
                 print_substep "✓ $name (found as $alias in TOML)"
             else
                 # ARTIFACT MISSING: Add new version and library definition using default_alias
