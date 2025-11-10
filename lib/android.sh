@@ -503,21 +503,35 @@ create_android_boilerplate() {
         return 1
     fi
 
-    # Append boilerplate to the file
-    echo "" >> "$target_file"
-    cat "$temp_boilerplate" >> "$target_file"
+    # Extract package line from the existing file
+    local package_line=$(grep "^package " "$target_file" | head -1)
 
-    # Clean up temp file
-    rm -f "$temp_boilerplate"
+    # Create new file with package line + boilerplate
+    local temp_new_file="/tmp/trustarc-new-$$.kt"
 
-    # Replace domain placeholder in the target file
+    if [ -n "$package_line" ]; then
+        # Write package line
+        echo "$package_line" > "$temp_new_file"
+        echo "" >> "$temp_new_file"
+    fi
+
+    # Append boilerplate
+    cat "$temp_boilerplate" >> "$temp_new_file"
+
+    # Replace domain placeholder in the new file
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS
-        sed -i '' "s/__TRUSTARC_DOMAIN_PLACEHOLDER__/$domain/g" "$target_file"
+        sed -i '' "s/__TRUSTARC_DOMAIN_PLACEHOLDER__/$domain/g" "$temp_new_file"
     else
         # Linux
-        sed -i "s/__TRUSTARC_DOMAIN_PLACEHOLDER__/$domain/g" "$target_file"
+        sed -i "s/__TRUSTARC_DOMAIN_PLACEHOLDER__/$domain/g" "$temp_new_file"
     fi
+
+    # Replace the original file with the new one
+    mv "$temp_new_file" "$target_file"
+
+    # Clean up temp files
+    rm -f "$temp_boilerplate"
 
     echo ""
     print_success "Implementation added to $file_name"
