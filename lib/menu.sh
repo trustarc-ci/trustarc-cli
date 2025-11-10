@@ -234,7 +234,7 @@ integrate_sdk() {
                 integrate_ios_sdk "$project_path"
                 ;;
             android)
-                print_warning "Android integration not yet implemented"
+                integrate_android_sdk "$project_path"
                 ;;
             react-native)
                 print_warning "React Native integration not yet implemented"
