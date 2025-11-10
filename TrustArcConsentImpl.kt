@@ -88,7 +88,7 @@ object TrustArcConsentImpl {
             return emptyMap()
         }
 
-        return trustArc.consentData ?: emptyMap()
+        return trustArc.getConsentDataByCategory()
     }
 
     /**

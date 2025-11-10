@@ -411,6 +411,428 @@ ${library_entry}
     return 0
 }
 
+# Compare two semantic versions (returns 0 if v1 >= v2, 1 if v1 < v2)
+version_compare() {
+    local v1=$1
+    local v2=$2
+
+    # Remove any non-numeric prefix/suffix (like "1.9.0-alpha")
+    v1=$(echo "$v1" | grep -oE "^[0-9]+\.[0-9]+\.[0-9]+")
+    v2=$(echo "$v2" | grep -oE "^[0-9]+\.[0-9]+\.[0-9]+")
+
+    if [ "$v1" = "$v2" ]; then
+        return 0
+    fi
+
+    local IFS=.
+    local i ver1=($v1) ver2=($v2)
+
+    # Fill empty positions with zeros
+    for ((i=${#ver1[@]}; i<${#ver2[@]}; i++)); do
+        ver1[i]=0
+    done
+
+    for ((i=0; i<${#ver1[@]}; i++)); do
+        if [[ -z ${ver2[i]} ]]; then
+            ver2[i]=0
+        fi
+        if ((10#${ver1[i]} > 10#${ver2[i]})); then
+            return 0
+        fi
+        if ((10#${ver1[i]} < 10#${ver2[i]})); then
+            return 1
+        fi
+    done
+    return 0
+}
+
+# Extract version from dependency line
+extract_dependency_version() {
+    local dep_line=$1
+    echo "$dep_line" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1
+}
+
+# Convert artifact name to camelCase for version key
+# Example: core-ktx → coreKtx, webkit → webkit
+to_camel_case() {
+    local str=$1
+    echo "$str" | awk -F'-' '{
+        printf "%s", $1
+        for(i=2; i<=NF; i++) {
+            printf "%s", toupper(substr($i,1,1)) tolower(substr($i,2))
+        }
+    }'
+}
+
+# Get the TOML library key for a dependency
+# Returns the key (e.g., "androidx-core-ktx") or empty string if not found
+get_toml_library_key() {
+    local version_catalog=$1
+    local group=$2
+    local artifact=$3
+
+    if [ -n "$DEBUG" ]; then
+        echo "[DEBUG] get_toml_library_key: Searching for ${group}:${artifact}" >&2
+    fi
+
+    # Search for group/name format: group = "androidx.core", name = "core-ktx"
+    if [ -n "$DEBUG" ]; then
+        echo "[DEBUG] Trying group/name format search..." >&2
+    fi
+
+    local line=$(grep -n "group = \"${group}\"" "$version_catalog" 2>/dev/null | grep "name = \"${artifact}\"" | head -1)
+
+    if [ -n "$DEBUG" ]; then
+        echo "[DEBUG] group/name search result: '$line'" >&2
+    fi
+
+    if [ -n "$line" ]; then
+        # Extract the key from the line (e.g., "androidx-core-ktx = { group ...")
+        local key=$(echo "$line" | sed 's/^[0-9]*://; s/[[:space:]]*=[[:space:]]*{.*//' | xargs)
+        if [ -n "$DEBUG" ]; then
+            echo "[DEBUG] Extracted key: '$key'" >&2
+        fi
+        echo "$key"
+        return 0
+    fi
+
+    # Search for module format: module = "androidx.core:core-ktx"
+    if [ -n "$DEBUG" ]; then
+        echo "[DEBUG] Trying module format search..." >&2
+    fi
+
+    local line=$(grep -n "module = \"${group}:${artifact}\"" "$version_catalog" 2>/dev/null | head -1)
+
+    if [ -n "$DEBUG" ]; then
+        echo "[DEBUG] module search result: '$line'" >&2
+    fi
+
+    if [ -n "$line" ]; then
+        # Extract the key from the line
+        local key=$(echo "$line" | sed 's/^[0-9]*://; s/[[:space:]]*=[[:space:]]*{.*//' | xargs)
+        if [ -n "$DEBUG" ]; then
+            echo "[DEBUG] Extracted key: '$key'" >&2
+        fi
+        echo "$key"
+        return 0
+    fi
+
+    if [ -n "$DEBUG" ]; then
+        echo "[DEBUG] Not found in TOML" >&2
+    fi
+
+    # Not found
+    return 1
+}
+
+# Check if dependency exists in TOML
+# Searches for either format:
+# 1. group = "androidx.core", name = "core-ktx"
+# 2. module = "androidx.core:core-ktx"
+check_dependency_in_toml() {
+    local version_catalog=$1
+    local group=$2
+    local artifact=$3
+
+    if [ -n "$DEBUG" ]; then
+        echo "[DEBUG] Checking TOML for: $group:$artifact" >&2
+    fi
+
+    local key=$(get_toml_library_key "$version_catalog" "$group" "$artifact")
+
+    if [ -n "$key" ]; then
+        if [ -n "$DEBUG" ]; then
+            echo "[DEBUG] Found in TOML with key: $key" >&2
+        fi
+        return 0
+    fi
+
+    if [ -n "$DEBUG" ]; then
+        echo "[DEBUG] Not found in TOML" >&2
+    fi
+    return 1
+}
+
+# Simple check: does dependency exist in build.gradle or TOML?
+check_dependency_exists() {
+    local build_gradle=$1
+    local group_artifact=$2
+    local required_version=$3
+    local project_path=$4
+
+    local group=$(echo "$group_artifact" | cut -d: -f1)
+    local artifact=$(echo "$group_artifact" | cut -d: -f2)
+
+    # Check if version catalog exists
+    local version_catalog="$project_path/gradle/libs.versions.toml"
+    if [ -f "$version_catalog" ]; then
+        # Get the actual TOML key
+        local toml_key=$(get_toml_library_key "$version_catalog" "$group" "$artifact")
+
+        if [ -n "$toml_key" ]; then
+            # Found in TOML, check if referenced in build.gradle
+            local lib_ref=$(echo "$toml_key" | tr '-' '.')
+            if grep -qF "libs.${lib_ref}" "$build_gradle" 2>/dev/null; then
+                return 0  # Exists and is used
+            else
+                return 1  # In TOML but not in build.gradle
+            fi
+        else
+            return 1  # Not in TOML
+        fi
+    fi
+
+    # No version catalog, check for direct dependency
+    if grep -qF "${group_artifact}:" "$build_gradle" 2>/dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Add dependency to version catalog (TOML)
+add_dependency_to_toml() {
+    local version_catalog=$1
+    local group=$2
+    local artifact=$3
+    local version=$4
+
+    # Create version key (camelCase from artifact)
+    local version_key=$(to_camel_case "$artifact")
+
+    # Create library key: first-segment + artifact
+    # Example: androidx.core:core-ktx → androidx-core-ktx
+    local first_segment=$(echo "$group" | cut -d. -f1)
+    local lib_key="${first_segment}-${artifact}"
+
+    if [ -n "$DEBUG" ]; then
+        echo "[DEBUG] Adding to TOML: key=$lib_key, module=${group}:${artifact}, version=$version" >&2
+    fi
+
+    # Add version to [versions] section
+    local versions_line=$(grep -n "^\[versions\]" "$version_catalog" | cut -d: -f1)
+    if [ -n "$versions_line" ]; then
+        # Find the last line before next section
+        local next_section=$(tail -n +$((versions_line + 1)) "$version_catalog" | grep -n "^\[" | head -1 | cut -d: -f1)
+        if [ -n "$next_section" ]; then
+            local insert_line=$((versions_line + next_section - 1))
+        else
+            # Find end of [versions] section (last non-empty line before next section or EOF)
+            local insert_line=$((versions_line + 1))
+            while [ $insert_line -le $(wc -l < "$version_catalog") ]; do
+                local line_content=$(sed -n "${insert_line}p" "$version_catalog")
+                if [ -z "$line_content" ] || [[ "$line_content" =~ ^\[ ]]; then
+                    break
+                fi
+                ((insert_line++))
+            done
+            ((insert_line--))
+        fi
+
+        # Insert version
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "${insert_line}a\\
+${version_key} = \"${version}\"
+" "$version_catalog"
+        else
+            sed -i "${insert_line}a\\${version_key} = \"${version}\"" "$version_catalog"
+        fi
+    fi
+
+    # Add library to [libraries] section using module format
+    local libraries_line=$(grep -n "^\[libraries\]" "$version_catalog" | cut -d: -f1)
+    if [ -n "$libraries_line" ]; then
+        # Find the last line before next section
+        local next_section=$(tail -n +$((libraries_line + 1)) "$version_catalog" | grep -n "^\[" | head -1 | cut -d: -f1)
+        if [ -n "$next_section" ]; then
+            local insert_line=$((libraries_line + next_section - 1))
+        else
+            # End of file
+            local insert_line=$((libraries_line + 1))
+            while [ $insert_line -le $(wc -l < "$version_catalog") ]; do
+                local line_content=$(sed -n "${insert_line}p" "$version_catalog")
+                if [ -z "$line_content" ] || [[ "$line_content" =~ ^\[ ]]; then
+                    break
+                fi
+                ((insert_line++))
+            done
+            ((insert_line--))
+        fi
+
+        # Insert library using module format
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "${insert_line}a\\
+${lib_key} = { module = \"${group}:${artifact}\", version.ref = \"${version_key}\" }
+" "$version_catalog"
+        else
+            sed -i "${insert_line}a\\${lib_key} = { module = \"${group}:${artifact}\", version.ref = \"${version_key}\" }" "$version_catalog"
+        fi
+    fi
+}
+
+# Add required dependencies for TrustArc SDK
+add_required_dependencies() {
+    local app_build_gradle=$1
+    local project_path=$2
+
+    echo ""
+    print_step "Checking required dependencies..."
+    echo ""
+
+    # Required dependencies with TOML aliases
+    local required_deps=(
+        "androidx.core:core-ktx:1.9.0:coreKtx"
+        "androidx.appcompat:appcompat:1.6.1:appcompat"
+        "androidx.constraintlayout:constraintlayout:2.1.4:constraintLayout"
+        "androidx.webkit:webkit:1.4.0:webkit"
+        "androidx.lifecycle:lifecycle-extensions:2.2.0:lifecycleExtensions"
+        "androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2:lifecycleViewmodelKtx"
+        "androidx.activity:activity:1.8.0:activity"
+        "com.google.android.material:material:1.9.0:material"
+        "com.squareup.retrofit2:retrofit:2.9.0:retrofit"
+        "com.squareup.retrofit2:converter-gson:2.9.0:retrofitConverterGson"
+    )
+
+    local version_catalog="$project_path/gradle/libs.versions.toml"
+    local use_toml=false
+
+    if [ -f "$version_catalog" ]; then
+        use_toml=true
+        print_info "Using version catalog with duplicate checking"
+
+        # Ensure [versions] and [libraries] sections exist (using fixed sed syntax if needed)
+        grep -q "^\[versions\]" "$version_catalog" || echo -e "\n[versions]" >> "$version_catalog"
+        grep -q "^\[libraries\]" "$version_catalog" || echo -e "\n[libraries]" >> "$version_catalog"
+    else
+        print_info "Using direct gradle dependencies"
+    fi
+
+    local added_count=0
+
+    for dep in "${required_deps[@]}"; do
+        IFS=':' read -r group name version default_alias <<< "$dep"
+        local alias=$default_alias
+        local toml_ref="libs.$alias"
+
+        if [ "$use_toml" = true ]; then
+            # --- 0. CHECK FOR EXISTING ARTIFACT (GROUP:NAME) ---
+            local existing_alias=$(awk -v GRP="$group" -v NM="$name" '
+                /^\[libraries\]/{in_libraries=1; next}
+                /^\[/{in_libraries=0}
+                in_libraries && $0 !~ /^\s*$/ && $0 !~ /^#/ {
+                    if (($0 ~ "group = \"" GRP "\"" && $0 ~ "name = \"" NM "\"") || $0 ~ "module = \"" GRP ":" NM "\"") {
+                        split($0, arr, " =");
+                        gsub(/^[ \t]+/, "", arr[1]);
+                        print arr[1];
+                        exit;
+                    }
+                }' "$version_catalog")
+
+            if [ -n "$existing_alias" ]; then
+                # ARTIFACT EXISTS: Use the existing alias and skip adding library/version.
+                alias=$existing_alias
+                toml_ref="libs.$alias"
+                print_substep "✓ $name (found as $alias in TOML)"
+            else
+                # ARTIFACT MISSING: Add new version and library definition using default_alias
+
+                # 1. Check/Add version (ensures version keys are added if missing)
+                if ! grep -q "^$alias[[:space:]]*=" "$version_catalog"; then
+                    print_substep "+ Adding version: $alias = \"$version\""
+                    local version_entry="$alias = \"$version\""
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        sed -i '' "/^\[versions\]/a\\
+$version_entry
+" "$version_catalog"
+                    else
+                        # Note: The logic for Linux sed needs adjustment if it doesn't support \n
+                        sed -i "/^\[versions\]/a\\$version_entry" "$version_catalog"
+                    fi
+                fi
+
+                # 2. Add library definition (ensures the definition is added if missing)
+                if ! grep -q "^$alias[[:space:]]*={" "$version_catalog"; then
+                    print_substep "+ Adding library: $alias"
+                    local library_entry="$alias = { group = \"$group\", name = \"$name\", version.ref = \"$alias\" }"
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        sed -i '' "/^\[libraries\]/a\\
+$library_entry
+" "$version_catalog"
+                    else
+                        sed -i "/^\[libraries\]/a\\$library_entry" "$version_catalog"
+                    fi
+                fi
+            fi
+
+            # --- 3. CHECK/UPDATE BUILD.GRADLE ---
+            # Check if the old dependency string is present in the Gradle file
+            if grep -q "implementation.*$group:$name" "$app_build_gradle"; then
+                # Dependency artifact found. Check if it uses the current TOML reference.
+                if ! grep -q "implementation.*$toml_ref" "$app_build_gradle"; then
+                    print_substep "→ Updating $name to use $toml_ref"
+                    # Replace the old implementation line (Groovy/Kotlin string) with the new reference
+                    # Note: Using | as delimiter for sed to avoid escaping slashes in dependency string
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        # macOS/BSD sed with fixed syntax
+                        sed -i '' "s|implementation([\"']$group:$name[^\"']*[\"'])|implementation($toml_ref)|g" "$app_build_gradle"
+                    else
+                        # Linux/GNU sed with fixed syntax
+                        sed -i "s|implementation([\"']$group:$name[^\"']*[\"'])|implementation($toml_ref)|g" "$app_build_gradle"
+                    fi
+                    ((added_count++))
+                else
+                    print_substep "✓ $name (already using $toml_ref)"
+                fi
+            else
+                # Dependency is completely missing from the Gradle file.
+                if ! grep -q "implementation.*$toml_ref" "$app_build_gradle"; then
+                    print_substep "+ Adding $toml_ref to build.gradle"
+                    local implementation_entry="    implementation($toml_ref)"
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        # macOS/BSD sed with fixed syntax
+                        sed -i '' "/dependencies[[:space:]]*{/a\\
+$implementation_entry
+" "$app_build_gradle"
+                    else
+                        # Linux/GNU sed with fixed syntax
+                        sed -i "/dependencies[[:space:]]*{/a\\$implementation_entry" "$app_build_gradle"
+                    fi
+                    ((added_count++))
+                fi
+            fi
+        else
+            # --- DIRECT GRADLE MODE (NO TOML) ---
+            local full_dep="${group}:${name}:${version}"
+
+            if grep -q "implementation([\"']$full_dep[\"'])" "$app_build_gradle"; then
+                print_substep "✓ $name (already present)"
+            elif grep -q "implementation([\"']$group:$name" "$app_build_gradle"; then
+                print_substep "⚠ $name found with different version (skipping)"
+            else
+                print_substep "+ Adding $full_dep"
+                local implementation_entry="    implementation(\"$full_dep\")"
+                if [[ "$OSTYPE" == "darwin"* ]]; then
+                    sed -i '' "/dependencies[[:space:]]*{/a\\
+$implementation_entry
+" "$app_build_gradle"
+                else
+                    sed -i "/dependencies[[:space:]]*{/a\\$implementation_entry" "$app_build_gradle"
+                fi
+                ((added_count++))
+            fi
+        fi
+    done
+
+    echo ""
+    if [ $added_count -eq 0 ]; then
+        print_success "All required dependencies are already present"
+    else
+        print_success "Added/updated $added_count dependencies"
+    fi
+
+    return 0
+}
+
 # Add TrustArc dependency to app/build.gradle
 add_trustarc_dependency() {
     local app_build_gradle=$1
@@ -745,6 +1167,13 @@ integrate_android_sdk() {
 
     echo ""
 
+    # Add required dependencies
+    if [ -n "$app_build_gradle" ]; then
+        add_required_dependencies "$app_build_gradle" "$project_path"
+    fi
+
+    echo ""
+
     # Create boilerplate
     read -p "Would you like to create a sample implementation file? (y/n): " create_impl
     if [ "$create_impl" = "y" ] || [ "$create_impl" = "Y" ]; then
@@ -756,3 +1185,4 @@ integrate_android_sdk() {
 
     return 0
 }
+
