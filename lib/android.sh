@@ -200,24 +200,36 @@ verify_android_compatibility() {
 
     print_info "Verifying project compatibility..."
 
+    # Convert relative path to absolute path
+    project_path=$(cd "$project_path" && pwd)
+
+    # Debug: Show the resolved path
+    echo ""
+    print_info "Project path: $project_path"
+
     # Find app build.gradle file
     local app_build_gradle=""
     if [ -f "$project_path/app/build.gradle" ]; then
         app_build_gradle="$project_path/app/build.gradle"
+        print_info "Found: app/build.gradle"
     elif [ -f "$project_path/app/build.gradle.kts" ]; then
         app_build_gradle="$project_path/app/build.gradle.kts"
+        print_info "Found: app/build.gradle.kts"
     else
         print_error "No app/build.gradle or app/build.gradle.kts file found"
+        print_info "Checked: $project_path/app/build.gradle"
         return 1
     fi
 
-    # Extract minSdk version
-    local min_sdk=$(grep -o "minSdk[[:space:]]*=[[:space:]]*[0-9]*" "$app_build_gradle" | head -1 | grep -o "[0-9]*" || \
-                    grep -o "minSdkVersion[[:space:]]*[0-9]*" "$app_build_gradle" | head -1 | grep -o "[0-9]*")
+    print_info "Using build file: $app_build_gradle"
 
-    # Extract compileSdk version
-    local compile_sdk=$(grep -o "compileSdk[[:space:]]*=[[:space:]]*[0-9]*" "$app_build_gradle" | head -1 | grep -o "[0-9]*" || \
-                        grep -o "compileSdkVersion[[:space:]]*[0-9]*" "$app_build_gradle" | head -1 | grep -o "[0-9]*")
+    # Extract minSdk version (supports: minSdk 28, minSdkVersion 28, minSdk = 28, etc.)
+    local min_sdk=""
+    min_sdk=$(grep -E "minSdk(Version)?[[:space:]]*(=)?[[:space:]]*[0-9]+" "$app_build_gradle" | grep -oE "[0-9]+" | tail -1)
+
+    # Extract compileSdk version (supports: compileSdk 35, compileSdk = 35, etc.)
+    local compile_sdk=""
+    compile_sdk=$(grep -E "compileSdk(Version)?[[:space:]]*(=)?[[:space:]]*[0-9]+" "$app_build_gradle" | grep -oE "[0-9]+" | tail -1)
 
     echo ""
     print_info "Project Configuration:"
@@ -227,7 +239,10 @@ verify_android_compatibility() {
 
     # Verify minSdk (must be >= 28)
     if [ -n "$min_sdk" ]; then
-        if [ "$min_sdk" -lt 28 ]; then
+        # Check if min_sdk is a number before comparison
+        if ! [[ "$min_sdk" =~ ^[0-9]+$ ]]; then
+            print_warning "minSdk was found but could not be parsed as a number: $min_sdk"
+        elif [ "$min_sdk" -lt 28 ]; then
             print_error "minSdk must be 28 or higher (current: $min_sdk)"
             print_info "TrustArc SDK requires Android API 28+"
             return 1
@@ -243,7 +258,9 @@ verify_android_compatibility() {
 
     # Verify compileSdk (should be >= 33)
     if [ -n "$compile_sdk" ]; then
-        if [ "$compile_sdk" -lt 33 ]; then
+        if ! [[ "$compile_sdk" =~ ^[0-9]+$ ]]; then
+            print_warning "compileSdk was found but could not be parsed as a number: $compile_sdk"
+        elif [ "$compile_sdk" -lt 33 ]; then
             print_warning "compileSdk is $compile_sdk (recommended: 33+)"
         else
             print_success "Compile SDK is compatible ✓"
