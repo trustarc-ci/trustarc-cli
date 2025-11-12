@@ -2,6 +2,10 @@
 
 # Flutter integration functions for TrustArc CLI
 # This file contains logic for Flutter SDK integration
+#
+# SDK Requirements (from ccm-flutter-mobile-consent-sdk):
+# - Dart SDK: >= 3.4.1 < 4.0.0
+# - Flutter: >= 3.3.0
 
 # Detect if directory is a Flutter project
 is_flutter_project() {

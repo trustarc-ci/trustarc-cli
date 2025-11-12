@@ -2,6 +2,10 @@
 
 # iOS integration functions for TrustArc CLI
 # This file contains logic for iOS SDK integration
+#
+# SDK Requirements (from ccm-ios-mobile-consent-sdk):
+# - iOS Deployment Target: >= 13.0
+# - Swift: >= 6.0
 
 # Detect iOS dependency manager (SPM or CocoaPods)
 detect_ios_dependency_manager() {

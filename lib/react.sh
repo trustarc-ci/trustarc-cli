@@ -1,7 +1,11 @@
 #!/bin/bash
 
 # React Native integration functions for TrustArc CLI
-# This file contains logic for React Native SDK integration (Expo + Bare Metal)
+# This file contains logic for React Native SDK integration
+#
+# SDK Requirements (from ccm-react-native-mobile-consent-sdk):
+# - React Native: >= 0.73.4
+# - Node.js: >= 18 (Expo + Bare Metal)
 
 # Configure .npmrc for TrustArc GitHub registry
 configure_npmrc() {
@@ -111,6 +115,67 @@ detect_package_manager() {
     else
         echo "npm"  # Default to npm
     fi
+}
+
+# Get React Native version from package.json
+get_react_native_version() {
+    local project_path=$1
+    local package_json="$project_path/package.json"
+
+    # Extract version using node for accurate parsing
+    local version=$(node -e "
+        const pkg = require('$package_json');
+        const rnVersion = pkg.dependencies['react-native'] || pkg.devDependencies['react-native'] || '';
+        console.log(rnVersion.replace(/[^0-9.]/g, ''));
+    " 2>/dev/null)
+
+    echo "$version"
+}
+
+# Check React Native version compatibility
+check_react_native_compatibility() {
+    local project_path=$1
+    local current_version=$(get_react_native_version "$project_path")
+
+    if [ -z "$current_version" ]; then
+        print_error "Could not detect React Native version"
+        return 1
+    fi
+
+    # Required version: >=0.73.4 (from SDK sample-app)
+    local required_major=0
+    local required_minor=73
+    local required_patch=4
+
+    # Parse current version
+    local current_major=$(echo "$current_version" | cut -d. -f1)
+    local current_minor=$(echo "$current_version" | cut -d. -f2)
+    local current_patch=$(echo "$current_version" | cut -d. -f3)
+
+    print_substep "React Native version: $current_version"
+
+    # Compare versions
+    if [ "$current_major" -gt "$required_major" ]; then
+        return 0
+    elif [ "$current_major" -eq "$required_major" ]; then
+        if [ "$current_minor" -gt "$required_minor" ]; then
+            return 0
+        elif [ "$current_minor" -eq "$required_minor" ]; then
+            if [ "$current_patch" -ge "$required_patch" ]; then
+                return 0
+            fi
+        fi
+    fi
+
+    # Version is too old - stop installation
+    echo ""
+    print_error "React Native version $current_version is not compatible"
+    print_info "TrustArc SDK requires React Native >= 0.73.4"
+    echo ""
+    print_info "Please upgrade your React Native version:"
+    print_substep "https://react-native-community.github.io/upgrade-helper/"
+    echo ""
+    return 1
 }
 
 # Check if TrustArc SDK exists in package.json
@@ -485,6 +550,12 @@ integrate_react_native_sdk() {
     # Detect package manager
     local package_manager=$(detect_package_manager "$project_path")
 
+    # Check React Native version compatibility
+    echo ""
+    if ! check_react_native_compatibility "$project_path"; then
+        return 1
+    fi
+
     # Display detection summary
     echo ""
     print_divider
@@ -499,7 +570,7 @@ integrate_react_native_sdk() {
     fi
 
     # Get React Native version
-    local rn_version=$(grep '"react-native"' "$project_path/package.json" | sed 's/.*: *"\([^"]*\)".*/\1/')
+    local rn_version=$(get_react_native_version "$project_path")
     print_substep "React Native: $rn_version"
 
     # Get Node version

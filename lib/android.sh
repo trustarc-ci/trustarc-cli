@@ -2,6 +2,10 @@
 
 # Android integration functions for TrustArc CLI
 # This file contains logic for Android SDK integration
+#
+# SDK Requirements (from ccm-android-mobile-consent-sdk):
+# - minSdk: 28 (Android 9.0 Pie)
+# - compileSdk: 34 (Android 14)
 
 # Check if Android project has Kotlin support
 has_kotlin_support() {
