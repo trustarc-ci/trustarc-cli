@@ -179,6 +179,10 @@ integrate_ios_sdk() {
         fi
         print_substep "Import and initialize the SDK in your app"
         echo ""
+        print_info "Documentation:"
+        print_substep "• iOS SDK: https://trustarchelp.zendesk.com/hc/en-us/sections/32837249680787-iOS"
+        print_substep "• API Reference: Check TrustArcConsentImpl.swift for available methods"
+        echo ""
     fi
 
     return $integration_result

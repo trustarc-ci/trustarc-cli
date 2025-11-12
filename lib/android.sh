@@ -1184,6 +1184,11 @@ integrate_android_sdk() {
 
     echo ""
     print_success "Android SDK integration completed"
+    echo ""
+    print_info "Documentation:"
+    print_substep "• Android SDK: https://trustarchelp.zendesk.com/hc/en-us/sections/32824103168019-Android"
+    print_substep "• API Reference: Check TrustArcConsentImpl.kt for available methods"
+    echo ""
 
     return 0
 }
