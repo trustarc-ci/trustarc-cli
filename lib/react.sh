@@ -934,7 +934,15 @@ integrate_react_native_sdk() {
     echo ""
     print_divider
     echo ""
-    read -p "Would you like to create TrustArcConsentImpl.ts? (y/n): " boilerplate_choice
+
+    # Detect TypeScript to show correct file name in prompt
+    local use_typescript=$(detect_typescript "$project_path")
+    local boilerplate_filename="TrustArcConsentImpl.js"
+    if [ "$use_typescript" = "true" ]; then
+        boilerplate_filename="TrustArcConsentImpl.ts"
+    fi
+
+    read -p "Would you like to create $boilerplate_filename? (y/n): " boilerplate_choice
 
     if [ "$boilerplate_choice" = "y" ] || [ "$boilerplate_choice" = "Y" ]; then
         # Ask for domain
@@ -973,7 +981,13 @@ integrate_react_native_sdk() {
     echo ""
     print_info "Documentation:"
     print_substep "• React Native SDK: https://docs.trustarc.com/mobile/react-native"
-    print_substep "• API Reference: Check TrustArcConsentImpl.ts for available methods"
+
+    # Show correct file extension in API reference
+    local api_ref_file="TrustArcConsentImpl.js"
+    if [ "$use_typescript" = "true" ]; then
+        api_ref_file="TrustArcConsentImpl.ts"
+    fi
+    print_substep "• API Reference: Check $api_ref_file for available methods"
     echo ""
 
     return 0
