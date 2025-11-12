@@ -1008,6 +1008,13 @@ create_android_boilerplate() {
 integrate_android_sdk() {
     local project_path=$1
 
+    # Verify TRUSTARC_TOKEN is set
+    if [ -z "$TRUSTARC_TOKEN" ]; then
+        print_error "TRUSTARC_TOKEN environment variable is not set"
+        print_info "This should have been configured during CLI setup"
+        return 1
+    fi
+
     print_header "Android SDK Integration"
 
     # Check for Kotlin support

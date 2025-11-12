@@ -460,6 +460,13 @@ create_react_native_boilerplate() {
 integrate_react_native_sdk() {
     local project_path=$1
 
+    # Verify TRUSTARC_TOKEN is set
+    if [ -z "$TRUSTARC_TOKEN" ]; then
+        print_error "TRUSTARC_TOKEN environment variable is not set"
+        print_info "This should have been configured during CLI setup"
+        return 1
+    fi
+
     print_header "React Native SDK Integration"
 
     # Step 1: Detect project type

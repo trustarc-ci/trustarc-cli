@@ -240,7 +240,7 @@ integrate_sdk() {
                 integrate_react_native_sdk "$project_path"
                 ;;
             flutter)
-                print_warning "Flutter integration not yet implemented"
+                integrate_flutter_sdk "$project_path"
                 ;;
             *)
                 print_error "Unknown platform: $platform"
