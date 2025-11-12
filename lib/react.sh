@@ -254,10 +254,10 @@ verify_ios_integration() {
     fi
     print_substep "✓ TrustArc SDK found in Podfile.lock"
 
-    # Check for xcframework
-    local xcframework=$(find "$project_path/ios/Pods" -name "*trustarc*.xcframework" -o -name "*TrustArc*.framework" 2>/dev/null | head -1)
-    if [ -z "$xcframework" ]; then
-        print_warning "TrustArc xcframework not found in Pods directory"
+    # Check for xcframework in React Native SDK node_modules
+    local xcframework="$project_path/node_modules/@trustarc/trustarc-react-native-consent-sdk/ios/frameworks/trustarc_consent_sdk.xcframework"
+    if [ ! -d "$xcframework" ]; then
+        print_warning "TrustArc xcframework not found in node_modules"
         return 1
     fi
     local relative_path="${xcframework#$project_path/}"
@@ -858,7 +858,7 @@ integrate_react_native_sdk() {
         if [ -f "$project_path/ios/Podfile.lock" ]; then
             print_substep "• CocoaPods:      ✓ Installed"
             print_substep "• Podfile.lock:   ✓ Updated"
-            if find "$project_path/ios/Pods" -name "*trustarc*.xcframework" -o -name "*TrustArc*.framework" 2>/dev/null | grep -q .; then
+            if [ -d "$project_path/node_modules/@trustarc/trustarc-react-native-consent-sdk/ios/frameworks/trustarc_consent_sdk.xcframework" ]; then
                 print_substep "• xcframework:    ✓ Detected"
             fi
             if find "$project_path/ios" -maxdepth 1 -name "*.xcworkspace" 2>/dev/null | grep -q .; then
