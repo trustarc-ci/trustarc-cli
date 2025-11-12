@@ -254,10 +254,10 @@ verify_ios_integration() {
     fi
     print_substep "✓ TrustArc SDK found in Podfile.lock"
 
-    # Check for xcframework
-    local xcframework=$(find "$project_path/ios/Pods" -name "*trustarc*.xcframework" -o -name "*TrustArc*.framework" 2>/dev/null | head -1)
-    if [ -z "$xcframework" ]; then
-        print_warning "TrustArc xcframework not found in Pods directory"
+    # Check for xcframework in React Native SDK node_modules
+    local xcframework="$project_path/node_modules/@trustarc/trustarc-react-native-consent-sdk/ios/frameworks/trustarc_consent_sdk.xcframework"
+    if [ ! -d "$xcframework" ]; then
+        print_warning "TrustArc xcframework not found in node_modules"
         return 1
     fi
     local relative_path="${xcframework#$project_path/}"
@@ -359,6 +359,28 @@ run_pod_install() {
     fi
 }
 
+# Detect if project uses TypeScript
+detect_typescript() {
+    local project_path=$1
+
+    # Check for tsconfig.json
+    if [ -f "$project_path/tsconfig.json" ]; then
+        echo "true"
+        return 0
+    fi
+
+    # Check for typescript in package.json devDependencies
+    if [ -f "$project_path/package.json" ]; then
+        if grep -q '"typescript"' "$project_path/package.json"; then
+            echo "true"
+            return 0
+        fi
+    fi
+
+    echo "false"
+    return 1
+}
+
 # Create React Native boilerplate implementation
 create_react_native_boilerplate() {
     local project_path=$1
@@ -369,8 +391,22 @@ create_react_native_boilerplate() {
     print_step "Creating boilerplate implementation file"
     echo ""
 
+    # Detect if project uses TypeScript
+    local use_typescript=$(detect_typescript "$project_path")
+    local file_extension="js"
+    local file_name="TrustArcConsentImpl.js"
+
+    if [ "$use_typescript" = "true" ]; then
+        file_extension="ts"
+        file_name="TrustArcConsentImpl.ts"
+        print_info "TypeScript project detected"
+    else
+        print_info "JavaScript project detected"
+    fi
+    echo ""
+
     # Suggest locations based on project type
-    echo "Where would you like to create TrustArcConsentImpl.ts?"
+    echo "Where would you like to create $file_name?"
     echo ""
     echo "Suggested locations:"
     if [ "$project_type" = "expo" ]; then
@@ -421,11 +457,11 @@ create_react_native_boilerplate() {
         fi
     fi
 
-    local target_file="$target_dir/TrustArcConsentImpl.ts"
+    local target_file="$target_dir/$file_name"
 
     # Download boilerplate from GitHub
-    local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/main/TrustArcConsentImpl.ts"
-    local temp_boilerplate="/tmp/trustarc-boilerplate-$$.ts"
+    local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/main/TrustArcConsentImpl.$file_extension"
+    local temp_boilerplate="/tmp/trustarc-boilerplate-$$.$file_extension"
 
     echo ""
     print_info "Downloading boilerplate from GitHub..."
@@ -471,7 +507,11 @@ create_react_native_boilerplate() {
     echo ""
 
     if [ "$project_type" = "expo" ]; then
-        echo "${BOLD}In your app/_layout.tsx (Expo Router):${NC}"
+        if [ "$use_typescript" = "true" ]; then
+            echo "${BOLD}In your app/_layout.tsx (Expo Router):${NC}"
+        else
+            echo "${BOLD}In your app/_layout.js (Expo Router):${NC}"
+        fi
         echo ""
         echo "  ${DIM}import { useEffect } from 'react';${NC}"
         echo "  ${DIM}import TrustArcConsentImpl from './$relative_path';${NC}"
@@ -484,7 +524,11 @@ create_react_native_boilerplate() {
         echo "      ${DIM}return <Stack />;${NC}"
         echo "  ${DIM}}${NC}"
     else
-        echo "${BOLD}In your App.tsx or index.js:${NC}"
+        if [ "$use_typescript" = "true" ]; then
+            echo "${BOLD}In your App.tsx or index.ts:${NC}"
+        else
+            echo "${BOLD}In your App.js or index.js:${NC}"
+        fi
         echo ""
         echo "  ${DIM}import { useEffect } from 'react';${NC}"
         echo "  ${DIM}import TrustArcConsentImpl from './$relative_path';${NC}"
@@ -858,7 +902,7 @@ integrate_react_native_sdk() {
         if [ -f "$project_path/ios/Podfile.lock" ]; then
             print_substep "• CocoaPods:      ✓ Installed"
             print_substep "• Podfile.lock:   ✓ Updated"
-            if find "$project_path/ios/Pods" -name "*trustarc*.xcframework" -o -name "*TrustArc*.framework" 2>/dev/null | grep -q .; then
+            if [ -d "$project_path/node_modules/@trustarc/trustarc-react-native-consent-sdk/ios/frameworks/trustarc_consent_sdk.xcframework" ]; then
                 print_substep "• xcframework:    ✓ Detected"
             fi
             if find "$project_path/ios" -maxdepth 1 -name "*.xcworkspace" 2>/dev/null | grep -q .; then
