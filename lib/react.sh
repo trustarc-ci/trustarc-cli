@@ -114,7 +114,7 @@ detect_package_manager() {
 }
 
 # Check if TrustArc SDK exists in package.json
-check_trustarc_package() {
+react_check_trustarc_package() {
     local project_path=$1
     local package_json="$project_path/package.json"
 
@@ -540,7 +540,7 @@ integrate_react_native_sdk() {
     echo ""
     print_step "Checking TrustArc SDK package..."
 
-    local existing_version=$(check_trustarc_package "$project_path")
+    local existing_version=$(react_check_trustarc_package "$project_path")
     local install_package=false
     local target_version="latest"
 

@@ -26,7 +26,7 @@ is_flutter_project() {
 }
 
 # Check if TrustArc SDK exists in pubspec.yaml
-check_trustarc_package() {
+flutter_check_trustarc_package() {
     local project_path=$1
     local pubspec="$project_path/pubspec.yaml"
 
@@ -350,7 +350,7 @@ integrate_flutter_sdk() {
     echo ""
     print_step "Checking TrustArc SDK package..."
 
-    local existing_version=$(check_trustarc_package "$project_path")
+    local existing_version=$(flutter_check_trustarc_package "$project_path")
     local install_package=false
     local target_version="release"
 
