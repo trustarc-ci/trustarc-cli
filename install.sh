@@ -69,6 +69,7 @@ load_module "github"
 load_module "download"
 load_module "ios"
 load_module "android"
+load_module "react"
 load_module "menu"
 
 # Main installation flow

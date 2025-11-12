@@ -4,9 +4,11 @@ A command-line installer for integrating the TrustArc Mobile Consent SDK into yo
 
 ## Features
 
-- **Automated SDK Integration**: Streamlined installation process for iOS projects
-- **Swift Package Manager Support**: Easy integration with SPM-based projects
-- **CocoaPods Support**: Automatic Podfile modification and pod install
+- **Automated SDK Integration**: Streamlined installation process for iOS, Android, and React Native projects
+- **Multi-Platform Support**:
+  - iOS: Swift Package Manager (SPM) & CocoaPods
+  - Android: Gradle with version catalog support
+  - React Native: Expo & Bare Metal with auto-linking
 - **Sample Implementation**: Automatic boilerplate code generation
 - **Platform Detection**: Auto-detects your project configuration
 - **Git-Safe**: Validates git status before making changes
@@ -73,7 +75,9 @@ If you're using CocoaPods:
 4. **Code Generation**: Creates implementation boilerplate
 5. **Verification**: Confirms successful integration
 
-## iOS Integration
+## Platform-Specific Integration
+
+### iOS Integration
 
 The CLI supports:
 - Swift Package Manager (SPM)
@@ -85,23 +89,9 @@ The CLI supports:
 pod 'TrustArcConsentSDK', :git => 'https://TOKEN@github.com/...', :branch => 'release'
 ```
 
-### Integration Steps
+**SPM**: Provides step-by-step instructions for adding the package in Xcode with authentication.
 
-1. Choose "Integrate SDK" from the main menu
-2. Provide your project path
-3. Confirm git status is clean
-4. Enter your TrustArc domain
-5. Follow the guided integration process
-6. Optionally generate implementation boilerplate
-
-## Generated Code
-
-The CLI generates a `TrustArcConsentImpl` class with:
-- `initialize()` - Initialize the SDK
-- `openCm()` - Open the consent management dialog
-- Delegate implementations for SDK callbacks
-
-### Usage
+#### Generated Code (iOS)
 
 ```swift
 // Initialize SDK on app launch
@@ -110,6 +100,106 @@ TrustArcConsentImpl.shared.initialize()
 // Show consent dialog
 TrustArcConsentImpl.shared.openCm()
 ```
+
+### Android Integration
+
+The CLI supports:
+- Gradle (Groovy & Kotlin DSL)
+- Version Catalog (libs.versions.toml)
+- Android API 28+ (minSdk)
+- Kotlin required
+
+**Automatic Configuration**:
+- Adds Maven repository to `settings.gradle`
+- Configures dependency in `app/build.gradle` or version catalog
+- Installs required dependencies (AndroidX, Retrofit, Material)
+- Validates AGP-Kotlin compatibility
+
+#### Generated Code (Android)
+
+```kotlin
+// Initialize in Application class
+TrustArcConsentImpl.initialize(this)
+
+// Show consent dialog
+TrustArcConsentImpl.openCm()
+
+// Get consent data
+val consents = TrustArcConsentImpl.getConsentData()
+```
+
+### React Native Integration
+
+The CLI supports both:
+- **Expo (Managed)**: Uses `expo prebuild` to generate native code
+- **Bare Metal**: Direct iOS (CocoaPods) and Android (Gradle) integration
+
+**Automatic Detection**:
+- Detects project type (Expo vs Bare Metal)
+- Identifies package manager (npm/yarn)
+- Verifies native module linking
+
+**Expo Flow**:
+1. Configures `.npmrc` for GitHub Package Registry authentication
+2. Adds `@trustarc/trustarc-react-native-consent-sdk` to package.json
+3. Runs `npm install` or `yarn install`
+4. Executes `npx expo prebuild` to generate native directories
+5. Verifies iOS (Podfile.lock) and Android (build.gradle) integration
+
+**Bare Metal Flow**:
+1. Configures `.npmrc` for GitHub Package Registry authentication
+2. Adds SDK package to package.json
+3. Runs package manager install
+4. Executes `pod install` for iOS (if needed)
+5. Verifies auto-linking for Android
+6. Confirms native modules are properly linked
+
+**`.npmrc` Configuration**:
+
+The CLI automatically creates or updates `.npmrc` with:
+```
+@trustarc:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${TRUSTARC_TOKEN}
+```
+
+This configuration:
+- Routes `@trustarc` scoped packages to GitHub Package Registry
+- Uses `TRUSTARC_TOKEN` environment variable for authentication
+- Preserves existing `.npmrc` settings (appends if file exists)
+- Creates backup before modification
+
+#### Generated Code (React Native)
+
+```typescript
+// Initialize in App.tsx or _layout.tsx
+useEffect(() => {
+  TrustArcConsentImpl.initialize();
+}, []);
+
+// Show consent dialog
+TrustArcConsentImpl.openCm();
+
+// Listen for consent changes
+useEffect(() => {
+  const unsubscribe = TrustArcConsentImpl.onConsentChange((data) => {
+    console.log('Consent changed:', data);
+  });
+  return unsubscribe;
+}, []);
+
+// Get consent data
+const consents = await TrustArcConsentImpl.getConsentData();
+```
+
+### Integration Steps
+
+1. Choose "Integrate SDK" from the main menu
+2. Provide your project path
+3. Confirm git status is clean
+4. CLI auto-detects platform type
+5. Enter your TrustArc domain
+6. Follow the guided integration process
+7. Optionally generate implementation boilerplate
 
 ## Configuration
 
@@ -172,6 +262,41 @@ This will:
 - Verify the podspec exists in the repository
 - Check that CocoaPods is installed: `pod --version`
 - Try running `pod repo update`
+
+### "Unable to resolve @trustarc/trustarc-react-native-consent-sdk" (React Native)
+- Check that `.npmrc` exists in your project root
+- Verify `.npmrc` contains the GitHub registry configuration:
+  ```
+  @trustarc:registry=https://npm.pkg.github.com
+  //npm.pkg.github.com/:_authToken=${TRUSTARC_TOKEN}
+  ```
+- Ensure `TRUSTARC_TOKEN` environment variable is set:
+  ```bash
+  echo $TRUSTARC_TOKEN  # Should output your token
+  ```
+- Restart your terminal after setting the token
+- Try clearing npm cache: `npm cache clean --force`
+- For yarn: `yarn cache clean`
+
+### "TrustArcMobileSdk native module not found" (React Native)
+- Ensure you ran `npm install` or `yarn install` after adding the package
+- For Expo: Run `npx expo prebuild` to generate native directories
+- For Bare Metal iOS: Run `cd ios && pod install`
+- For Bare Metal Android: Clean and rebuild with `cd android && ./gradlew clean`
+- Restart Metro bundler: `npx react-native start --reset-cache`
+
+### "Prebuild failed" (Expo)
+- Check that all dependencies are properly installed
+- Verify `app.json` has correct configuration
+- Try removing `ios/` and `android/` directories and running prebuild again
+- Check Expo CLI version: `npx expo --version`
+
+### "Auto-linking not working" (React Native Bare Metal)
+- Verify `use_native_modules!` is in your iOS Podfile
+- Check `applyNativeModulesSettingsGradle` is in Android settings.gradle
+- Clean both platforms:
+  - iOS: `cd ios && pod deintegrate && pod install`
+  - Android: `cd android && ./gradlew clean`
 
 ### Getting the latest version
 Use the cache-bypass command:

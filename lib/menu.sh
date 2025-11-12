@@ -237,7 +237,7 @@ integrate_sdk() {
                 integrate_android_sdk "$project_path"
                 ;;
             react-native)
-                print_warning "React Native integration not yet implemented"
+                integrate_react_native_sdk "$project_path"
                 ;;
             flutter)
                 print_warning "Flutter integration not yet implemented"
