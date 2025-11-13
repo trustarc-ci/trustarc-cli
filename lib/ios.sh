@@ -236,8 +236,8 @@ integrate_ios_cocoapods() {
     print_success "Created backup: Podfile.backup"
     echo ""
 
-    # Prepare git URL with token
-    local git_url="https://${TRUSTARC_TOKEN}@github.com/trustarc/trustarc-mobile-consent.git"
+    # Prepare git URL with token placeholder
+    local git_url="https://YOUR_GITHUB_TOKEN@github.com/trustarc/trustarc-mobile-consent.git"
 
     # Add pod to Podfile (before the final 'end')
     print_step "Adding TrustArcConsentSDK to Podfile..."
@@ -287,15 +287,8 @@ integrate_ios_spm() {
     local project_path=$1
     local domain=$2
 
-    # Get the repository URL with embedded token
-    local repo_url=""
-    if [ -n "$TRUSTARC_TOKEN" ]; then
-        repo_url="https://${TRUSTARC_TOKEN}@github.com/trustarc/trustarc-mobile-consent.git"
-    else
-        echo ""
-        print_error "TRUSTARC_TOKEN not found in environment"
-        return 1
-    fi
+    # Get the repository URL with placeholder (user needs to replace manually)
+    local repo_url="https://YOUR_GITHUB_TOKEN@github.com/trustarc/trustarc-mobile-consent.git"
 
     # Ask which branch to use
     echo ""

@@ -198,9 +198,6 @@ out/
 *.zip
 *.rar
 
-# Platform directories (generated test apps)
-platforms/
-
 # Temporary files
 tmp/
 temp/

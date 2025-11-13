@@ -1,0 +1,37 @@
+<resources>
+    <string name="app_name">TrustArcMobileApp</string>
+    
+    <!-- Main Activity -->
+    <string name="title_trustarc_sdk_testing">TrustArc SDK Testing</string>
+    <string name="section_consent_status_dashboard">Consent Status Dashboard</string>
+    <string name="section_feature_verification">Feature Verification</string>
+    <string name="section_sdk_controls">SDK Controls</string>
+    
+    <!-- Consent Categories -->
+    <string name="consent_analytics">Analytics</string>
+    <string name="consent_marketing_ads">Marketing / Ads</string>
+    <string name="consent_functional">Functional</string>
+    
+    <!-- Status Labels -->
+    <string name="status_granted">Status: GRANTED</string>
+    <string name="status_denied">Status: DENIED</string>
+    
+    <!-- Feature Verification -->
+    <string name="btn_analytics_tracking">Analytics Tracking</string>
+    <string name="widget_personalized_content">Personalized Content</string>
+    <string name="btn_functional_preferences">Functional Preferences</string>
+    <string name="status_active">ACTIVE</string>
+    <string name="status_inactive">INACTIVE</string>
+    
+    <!-- SDK Controls -->
+    <string name="btn_show_consent_dialog">Show Consent Dialog</string>
+    <string name="btn_reset_consent">Reset Consent (New User)</string>
+    
+    <!-- Consent Dialog -->
+    <string name="dialog_title_consent_preferences">Consent Preferences</string>
+    <string name="desc_analytics">Track usage and performance</string>
+    <string name="desc_marketing">Personalized advertisements</string>
+    <string name="desc_functional">Enhanced user experience</string>
+    <string name="btn_accept">Accept</string>
+    <string name="btn_deny_all">Deny All</string>
+</resources>
