@@ -77,7 +77,7 @@ load_module "menu"
 # Main installation flow
 main() {
     clear
-    print_header "TrustArc Mobile Consent SDK Installer"
+    print_header "TrustArc Mobile Consent SDK Installer 0.1-alpha"
 
     # Load existing config
     load_config
