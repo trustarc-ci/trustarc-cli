@@ -232,11 +232,11 @@ class HomeFragment : Fragment() {
      * @see updateUIWithDynamicConsents for the UI update logic
      */
     private fun observeConsentChanges() {
-//        trustArc.addConsentListener { consents ->
-//            activity?.runOnUiThread {
-//                updateUIWithDynamicConsents(consents)
-//            }
-//        }
+        trustArc.addConsentListener { consents ->
+            activity?.runOnUiThread {
+                updateUIWithDynamicConsents(consents)
+            }
+        }
     }
 
     // ===== UI UPDATE METHODS =====
