@@ -5,7 +5,7 @@
 
 # Main menu
 show_main_menu() {
-    print_header "TrustArc Mobile Consent SDK"
+    print_header "TrustArc Mobile Consent SDK 0.1-alpha"
 
     echo "What would you like to do?"
     echo ""
