@@ -78,7 +78,8 @@ class AndroidDiagnostic:
 
     REQUIRED_PATTERNS = {
         'sdk_import': r'import\s+com\.truste\.androidmobileconsentsdk\.TrustArc',
-        'sdk_constructor': r'TrustArc\s*\(\s*\w+\s*,\s*SdkMode\.',
+        'sdk_constructor': r'TrustArc\s*\(',  # Look for constructor call
+        'sdkmode_usage': r'SdkMode\.',  # Separate check for SdkMode usage
         'sdk_start': r'\.start\s*\(',
     }
 
@@ -109,34 +110,78 @@ class AndroidDiagnostic:
     def check_gradle_dependency(self):
         """Check if TrustArc SDK is in gradle dependencies"""
         gradle_files = list(self.project_path.rglob("build.gradle*"))
+        toml_files = list(self.project_path.rglob("libs.versions.toml"))
 
         found = False
+        version = None
+
+        # Check traditional gradle files
         for gradle_file in gradle_files:
             try:
                 content = gradle_file.read_text()
-                if 'com.trustarc:trustarc-consent-sdk' in content:
+                if 'com.trustarc:trustarc-consent-sdk' in content or 'trustarc.consent.sdk' in content:
                     found = True
 
                     # Check version
                     version_match = re.search(r'trustarc-consent-sdk["\']?\s*:\s*["\']?(\d+\.\d+\.\d+)', content)
                     if version_match:
                         version = version_match.group(1)
+
+                    if version:
                         self.issues.append(Issue(
                             severity=Severity.SUCCESS,
                             category="Dependency",
                             message=f"TrustArc SDK found (version {version})",
                             file_path=str(gradle_file)
                         ))
+                    else:
+                        self.issues.append(Issue(
+                            severity=Severity.SUCCESS,
+                            category="Dependency",
+                            message="TrustArc SDK found (using version catalog)",
+                            file_path=str(gradle_file)
+                        ))
                     break
-            except Exception as e:
+            except Exception:
                 continue
+
+        # Check Gradle version catalogs (libs.versions.toml)
+        if not found:
+            for toml_file in toml_files:
+                try:
+                    content = toml_file.read_text()
+                    if 'trustarc-consent-sdk' in content or 'trustarcConsentSdk' in content:
+                        found = True
+
+                        # Try to extract version from toml
+                        version_match = re.search(r'trustarcConsentSdk\s*=\s*"(\d+\.\d+\.\d+)"', content)
+                        if version_match:
+                            version = version_match.group(1)
+
+                        if version:
+                            self.issues.append(Issue(
+                                severity=Severity.SUCCESS,
+                                category="Dependency",
+                                message=f"TrustArc SDK found in version catalog (version {version})",
+                                file_path=str(toml_file)
+                            ))
+                        else:
+                            self.issues.append(Issue(
+                                severity=Severity.SUCCESS,
+                                category="Dependency",
+                                message="TrustArc SDK found in version catalog",
+                                file_path=str(toml_file)
+                            ))
+                        break
+                except Exception:
+                    continue
 
         if not found:
             self.issues.append(Issue(
                 severity=Severity.ERROR,
                 category="Dependency",
                 message="TrustArc SDK dependency not found in gradle files",
-                suggestion="Add: implementation(\"com.trustarc:trustarc-consent-sdk:VERSION\")"
+                suggestion="Add: implementation(\"com.trustarc:trustarc-consent-sdk:VERSION\") or add to libs.versions.toml"
             ))
 
     def check_manifest_permissions(self):
@@ -177,12 +222,33 @@ class AndroidDiagnostic:
         """Check Kotlin/Java files for SDK usage"""
         code_files = list(self.project_path.rglob("*.kt")) + list(self.project_path.rglob("*.java"))
 
+        # Collect all SDK-related files
         sdk_files = []
+        di_files = []  # Hilt/Dagger DI files
+        application_files = []  # Application class files
+        manager_files = []  # ConsentManager or similar wrapper files
+
         for code_file in code_files:
             try:
                 content = code_file.read_text()
+
+                # Check for TrustArc SDK usage
                 if 'TrustArc' in content and 'com.truste.androidmobileconsentsdk' in content:
                     sdk_files.append((code_file, content))
+
+                # Check for DI patterns
+                if any(anno in content for anno in ['@Module', '@Provides', '@Singleton', '@Inject', '@HiltAndroidApp', '@AndroidEntryPoint']):
+                    di_files.append((code_file, content))
+
+                # Check for Application class
+                if re.search(r'class\s+\w+\s*:\s*Application\(\)', content) or \
+                   re.search(r'class\s+\w+\s+extends\s+Application', content):
+                    application_files.append((code_file, content))
+
+                # Check for ConsentManager or similar wrappers
+                if re.search(r'(ConsentManager|TrustArcManager|SdkManager)', content):
+                    manager_files.append((code_file, content))
+
             except Exception:
                 continue
 
@@ -195,59 +261,201 @@ class AndroidDiagnostic:
             ))
             return
 
+        # Analyze the project architecture
+        self.analyze_initialization_architecture(sdk_files, di_files, application_files, manager_files)
+
+    def analyze_initialization_architecture(self, sdk_files, di_files, application_files, manager_files):
+        """Analyze the overall initialization architecture"""
+
+        # Check if using Dependency Injection
+        using_di = len(di_files) > 0
+
+        # Find where TrustArc constructor is called
+        constructor_locations = []
+        start_locations = []
+
         for file_path, content in sdk_files:
-            self.check_file_patterns(file_path, content)
+            # Check for constructor (must have both TrustArc( and SdkMode)
+            if re.search(self.REQUIRED_PATTERNS['sdk_constructor'], content) and \
+               re.search(self.REQUIRED_PATTERNS['sdkmode_usage'], content):
+                constructor_locations.append((file_path, content))
+            if re.search(self.REQUIRED_PATTERNS['sdk_start'], content):
+                start_locations.append((file_path, content))
 
-    def check_file_patterns(self, file_path: Path, content: str):
-        """Check individual file for patterns"""
-        lines = content.split('\n')
+        if using_di:
+            # DI-based architecture
+            self.check_di_architecture(constructor_locations, start_locations, di_files, application_files, manager_files, sdk_files)
+        else:
+            # Traditional direct initialization
+            self.check_traditional_architecture(constructor_locations, start_locations, sdk_files)
 
-        # Check for SDK constructor
-        has_constructor = bool(re.search(self.REQUIRED_PATTERNS['sdk_constructor'], content))
-        has_start = bool(re.search(self.REQUIRED_PATTERNS['sdk_start'], content))
+    def check_di_architecture(self, constructor_locations, start_locations, di_files, application_files, manager_files, sdk_files):
+        """Check DI-based initialization (Hilt/Dagger)"""
 
-        if has_constructor and not has_start:
-            self.issues.append(Issue(
-                severity=Severity.ERROR,
-                category="Initialization",
-                message="TrustArc instance created but start() never called",
-                file_path=str(file_path),
-                suggestion="Call trustArc.start(domainName = \"your.domain\")"
-            ))
+        # Check if constructor is in @Provides method (good pattern)
+        has_provides_trustarc = False
+        for file_path, content in di_files:
+            if re.search(r'@Provides.*?TrustArc', content, re.DOTALL):
+                has_provides_trustarc = True
+                self.issues.append(Issue(
+                    severity=Severity.SUCCESS,
+                    category="Architecture",
+                    message="TrustArc provided via Dependency Injection",
+                    file_path=str(file_path)
+                ))
+                break
 
-        # Check for recommended patterns
-        if has_start and not re.search(self.RECOMMENDED_PATTERNS['enable_debug'], content):
+        # Check if there's a wrapper/manager class
+        has_manager_with_start = False
+        for file_path, content in manager_files:
+            if re.search(r'\.start\s*\(', content):
+                has_manager_with_start = True
+
+                # Check if manager is injected
+                if '@Inject' in content:
+                    self.issues.append(Issue(
+                        severity=Severity.SUCCESS,
+                        category="Architecture",
+                        message="Initialization encapsulated in injected manager class",
+                        file_path=str(file_path)
+                    ))
+                break
+
+        # Check if Application class initializes the SDK
+        has_application_init = False
+        for file_path, content in application_files:
+            if '@HiltAndroidApp' in content:
+                # Look for initialization call
+                if re.search(r'(initialize|init|start)', content, re.IGNORECASE):
+                    has_application_init = True
+                    self.issues.append(Issue(
+                        severity=Severity.SUCCESS,
+                        category="Initialization",
+                        message="SDK initialized in Application class",
+                        file_path=str(file_path)
+                    ))
+                    break
+
+        # Only report error if using DI but missing complete initialization flow
+        if has_provides_trustarc and not (has_manager_with_start or has_application_init):
+            # Check if start() is called anywhere
+            if not start_locations:
+                self.issues.append(Issue(
+                    severity=Severity.ERROR,
+                    category="Initialization",
+                    message="TrustArc provided via DI but start() never called",
+                    suggestion="Call trustArc.start(domainName) in Application class or manager"
+                ))
+
+        # Info: recommend debug logging if not found
+        has_debug_log = any(re.search(r'\.enableDebugLog\s*\(', content) for _, content in sdk_files)
+        if not has_debug_log and (has_manager_with_start or has_application_init):
             self.issues.append(Issue(
                 severity=Severity.INFO,
                 category="Configuration",
                 message="Consider enabling debug logging for development",
-                file_path=str(file_path),
+                suggestion="Add: trustArc.enableDebugLog(true) before start()"
+            ))
+
+    def check_traditional_architecture(self, constructor_locations, start_locations, sdk_files):
+        """Check traditional direct initialization (non-DI)"""
+
+        if not constructor_locations:
+            self.issues.append(Issue(
+                severity=Severity.ERROR,
+                category="Initialization",
+                message="TrustArc instance never created",
+                suggestion="Create instance: val trustArc = TrustArc(context, SdkMode.Standard)"
+            ))
+            return
+
+        if not start_locations:
+            self.issues.append(Issue(
+                severity=Severity.ERROR,
+                category="Initialization",
+                message="TrustArc instance created but start() never called",
+                file_path=str(constructor_locations[0][0]),
+                suggestion="Call trustArc.start(domainName = \"your.domain\")"
+            ))
+            return
+
+        # Check if constructor and start are in same file
+        constructor_files = {str(fp) for fp, _ in constructor_locations}
+        start_files = {str(fp) for fp, _ in start_locations}
+
+        if constructor_files.intersection(start_files):
+            # Same file - check order
+            for file_path, content in sdk_files:
+                if str(file_path) in constructor_files:
+                    self.check_same_file_initialization_order(file_path, content)
+        else:
+            # Different files - check for singleton pattern
+            self.check_cross_file_initialization(constructor_locations, start_locations)
+
+        # Check for recommended patterns
+        has_debug_log = any(re.search(r'\.enableDebugLog\s*\(', content) for _, content in sdk_files)
+        if not has_debug_log:
+            self.issues.append(Issue(
+                severity=Severity.INFO,
+                category="Configuration",
+                message="Consider enabling debug logging for development",
                 suggestion="Add: trustArc.enableDebugLog(true)"
             ))
 
-        # Check initialization order
+    def check_same_file_initialization_order(self, file_path: Path, content: str):
+        """Check initialization order in same file"""
+        lines = content.split('\n')
         constructor_line = -1
         start_line = -1
 
         for i, line in enumerate(lines):
             if re.search(r'TrustArc\s*\(', line):
                 constructor_line = i
-            if re.search(r'\.start\s*\(', line):
+            if re.search(r'\.start\s*\(', line) and 'trustArc' in lines[max(0, i-2):i+1].__str__().lower():
                 start_line = i
 
-        if constructor_line > 0 and start_line > 0 and start_line < constructor_line:
-            self.issues.append(Issue(
-                severity=Severity.ERROR,
-                category="Initialization",
-                message="start() called before TrustArc constructor",
-                file_path=str(file_path),
-                line_number=start_line + 1,
-                suggestion="Ensure TrustArc instance is created before calling start()"
-            ))
+        if constructor_line > 0 and start_line > 0:
+            if start_line < constructor_line:
+                self.issues.append(Issue(
+                    severity=Severity.ERROR,
+                    category="Initialization",
+                    message="start() called before TrustArc constructor",
+                    file_path=str(file_path),
+                    line_number=start_line + 1,
+                    suggestion="Ensure TrustArc instance is created before calling start()"
+                ))
+            else:
+                self.issues.append(Issue(
+                    severity=Severity.SUCCESS,
+                    category="Initialization",
+                    message="TrustArc properly initialized with start()",
+                    file_path=str(file_path)
+                ))
+
+    def check_cross_file_initialization(self, constructor_locations, start_locations):
+        """Check initialization across different files"""
+        # Look for singleton pattern (TASharedInstance)
+        for file_path, content in start_locations:
+            if 'TASharedInstance' in content or 'getSdkInstance' in content:
+                self.issues.append(Issue(
+                    severity=Severity.SUCCESS,
+                    category="Initialization",
+                    message="Using singleton pattern for cross-activity access",
+                    file_path=str(file_path)
+                ))
+                return
+
+        # If no singleton pattern found, just note that initialization is split
+        self.issues.append(Issue(
+            severity=Severity.INFO,
+            category="Architecture",
+            message="TrustArc constructor and start() in different files",
+            suggestion="Ensure start() is called after constructor in application flow"
+        ))
 
     def check_initialization_flow(self):
         """Check for proper initialization flow"""
-        # This is a placeholder for more complex flow analysis
+        # This method is called from scan() but actual logic is now in analyze_initialization_architecture
         pass
 
 
@@ -255,9 +463,10 @@ class iOSDiagnostic:
     """iOS-specific diagnostic checks"""
 
     REQUIRED_PATTERNS = {
-        'sdk_import': r'import\s+TrustArcMobileConsent',
-        'sdk_constructor': r'TrustArc\s*\(\s*context:',
-        'sdk_start': r'\.start\s*\(',
+        'sdk_import': r'import\s+trustarc_consent_sdk',  # Lowercase with underscores
+        'shared_instance': r'TrustArc\.sharedInstance',  # Singleton pattern
+        'set_domain': r'\.setDomain\s*\(',
+        'sdk_start': r'\.start\s*\{',  # Start with closure
     }
 
     def __init__(self, project_path: str):
@@ -277,19 +486,35 @@ class iOSDiagnostic:
         podfile = list(self.project_path.rglob("Podfile"))
 
         found = False
+        dependency_type = None
 
         # Check SPM
         for package_file in package_files:
             try:
                 content = package_file.read_text()
-                if 'TrustArcMobileConsent' in content or 'trustarc-mobile-consent' in content:
+                if 'TrustArcMobileConsent' in content or 'trustarc-mobile-consent' in content or 'trustarc_consent_sdk' in content:
                     found = True
-                    self.issues.append(Issue(
-                        severity=Severity.SUCCESS,
-                        category="Dependency",
-                        message="TrustArc SDK found in Package.swift",
-                        file_path=str(package_file)
-                    ))
+                    dependency_type = "SPM"
+
+                    # Try to extract version
+                    version_match = re.search(r'from:\s*"(\d+\.\d+\.\d+)"', content) or \
+                                   re.search(r'exact:\s*"(\d+\.\d+\.\d+)"', content)
+
+                    if version_match:
+                        version = version_match.group(1)
+                        self.issues.append(Issue(
+                            severity=Severity.SUCCESS,
+                            category="Dependency",
+                            message=f"TrustArc SDK found in Package.swift (version {version})",
+                            file_path=str(package_file)
+                        ))
+                    else:
+                        self.issues.append(Issue(
+                            severity=Severity.SUCCESS,
+                            category="Dependency",
+                            message="TrustArc SDK found in Package.swift",
+                            file_path=str(package_file)
+                        ))
                     break
             except Exception:
                 continue
@@ -299,14 +524,28 @@ class iOSDiagnostic:
             for pod in podfile:
                 try:
                     content = pod.read_text()
-                    if 'TrustArcMobileConsent' in content:
+                    if 'TrustArcMobileConsent' in content or 'trustarc_consent_sdk' in content:
                         found = True
-                        self.issues.append(Issue(
-                            severity=Severity.SUCCESS,
-                            category="Dependency",
-                            message="TrustArc SDK found in Podfile",
-                            file_path=str(pod)
-                        ))
+                        dependency_type = "CocoaPods"
+
+                        # Try to extract version
+                        version_match = re.search(r"pod\s+['\"].*?['\"],\s*['\"]~>\s*(\d+\.\d+\.\d+)['\"]", content)
+
+                        if version_match:
+                            version = version_match.group(1)
+                            self.issues.append(Issue(
+                                severity=Severity.SUCCESS,
+                                category="Dependency",
+                                message=f"TrustArc SDK found in Podfile (version ~> {version})",
+                                file_path=str(pod)
+                            ))
+                        else:
+                            self.issues.append(Issue(
+                                severity=Severity.SUCCESS,
+                                category="Dependency",
+                                message="TrustArc SDK found in Podfile",
+                                file_path=str(pod)
+                            ))
                         break
                 except Exception:
                     continue
@@ -316,7 +555,7 @@ class iOSDiagnostic:
                 severity=Severity.ERROR,
                 category="Dependency",
                 message="TrustArc SDK dependency not found",
-                suggestion="Add TrustArc SDK via SPM or CocoaPods"
+                suggestion="Add TrustArc SDK via SPM (Package.swift) or CocoaPods (Podfile)"
             ))
 
     def check_swift_files(self):
@@ -327,7 +566,8 @@ class iOSDiagnostic:
         for swift_file in swift_files:
             try:
                 content = swift_file.read_text()
-                if 'TrustArc' in content and 'import TrustArcMobileConsent' in content:
+                # Look for the correct import statement (lowercase with underscores)
+                if 'TrustArc' in content and 'import trustarc_consent_sdk' in content:
                     sdk_files.append((swift_file, content))
             except Exception:
                 continue
@@ -337,25 +577,72 @@ class iOSDiagnostic:
                 severity=Severity.ERROR,
                 category="Implementation",
                 message="No TrustArc SDK usage found in Swift files",
-                suggestion="Import and initialize TrustArc SDK"
+                suggestion="Import SDK with: import trustarc_consent_sdk"
             ))
             return
 
+        # Check for proper initialization
+        self.check_initialization_patterns(sdk_files)
+
+    def check_initialization_patterns(self, sdk_files):
+        """Check iOS initialization patterns"""
+        has_shared_instance = False
+        has_set_domain = False
+        has_start = False
+
+        init_file = None
+
         for file_path, content in sdk_files:
-            self.check_swift_patterns(file_path, content)
+            if re.search(self.REQUIRED_PATTERNS['shared_instance'], content):
+                has_shared_instance = True
+            if re.search(self.REQUIRED_PATTERNS['set_domain'], content):
+                has_set_domain = True
+                init_file = file_path
+            if re.search(self.REQUIRED_PATTERNS['sdk_start'], content):
+                has_start = True
+                if init_file is None:
+                    init_file = file_path
 
-    def check_swift_patterns(self, file_path: Path, content: str):
-        """Check Swift file for patterns"""
-        has_constructor = bool(re.search(self.REQUIRED_PATTERNS['sdk_constructor'], content))
-        has_start = bool(re.search(self.REQUIRED_PATTERNS['sdk_start'], content))
+        # Report findings
+        if has_shared_instance:
+            self.issues.append(Issue(
+                severity=Severity.SUCCESS,
+                category="Architecture",
+                message="Using TrustArc.sharedInstance singleton pattern",
+                file_path=str(init_file) if init_file else None
+            ))
 
-        if has_constructor and not has_start:
+        if has_set_domain and has_start:
+            self.issues.append(Issue(
+                severity=Severity.SUCCESS,
+                category="Initialization",
+                message="TrustArc SDK properly configured with setDomain() and start()",
+                file_path=str(init_file)
+            ))
+        elif has_set_domain and not has_start:
             self.issues.append(Issue(
                 severity=Severity.ERROR,
                 category="Initialization",
-                message="TrustArc instance created but start() never called",
-                file_path=str(file_path),
-                suggestion="Call trustArc.start(domainName: \"your.domain\")"
+                message="SDK domain configured but start() never called",
+                file_path=str(init_file),
+                suggestion="Call TrustArc.sharedInstance.start { } to initialize SDK"
+            ))
+        elif not has_set_domain:
+            self.issues.append(Issue(
+                severity=Severity.ERROR,
+                category="Initialization",
+                message="SDK not initialized - missing setDomain() call",
+                suggestion="Configure SDK with: TrustArc.sharedInstance.setDomain(\"your.domain\").start { }"
+            ))
+
+        # Check for debug logging
+        has_debug = any(re.search(r'\.enableDebugLogs?\s*\(', content) for _, content in sdk_files)
+        if has_start and not has_debug:
+            self.issues.append(Issue(
+                severity=Severity.INFO,
+                category="Configuration",
+                message="Consider enabling debug logging for development",
+                suggestion="Add: TrustArc.sharedInstance.enableDebugLogs(true)"
             ))
 
 
