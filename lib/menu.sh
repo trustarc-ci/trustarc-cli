@@ -11,10 +11,11 @@ show_main_menu() {
     echo ""
     echo "  ${BOLD}1${NC}) Integrate SDK into project"
     echo "  ${BOLD}2${NC}) Download sample application"
-    echo "  ${BOLD}3${NC}) Clean up (remove token and config)"
-    echo "  ${BOLD}4${NC}) Exit"
+    echo "  ${BOLD}3${NC}) Diagnose project"
+    echo "  ${BOLD}4${NC}) Clean up (remove token and config)"
+    echo "  ${BOLD}5${NC}) Exit"
     echo ""
-    read -p "Enter your choice (1-4): " main_choice
+    read -p "Enter your choice (1-5): " main_choice
 
     case "$main_choice" in
         1)
@@ -24,12 +25,15 @@ show_main_menu() {
             download_sample_menu
             ;;
         3)
-            cleanup_trustarc
+            diagnose_project_menu
             ;;
         4)
+            cleanup_trustarc
+            ;;
+        5)
             echo ""
             print_info "Configuration saved to: $CONFIG_FILE"
-            print_substep "Run option 3 to clean up when you no longer need it"
+            print_substep "Run option 4 to clean up when you no longer need it"
             echo ""
             exit 0
             ;;
