@@ -85,10 +85,10 @@ add_trustarc_to_pubspec() {
         return 1
     fi
 
-    # Create the dependency entry with token
+    # Create the dependency entry with token placeholder
     local sdk_entry="  flutter_trustarc_mobile_consent_sdk:
     git:
-      url: https://\${TRUSTARC_TOKEN}@github.com/trustarc/trustarc-mobile-consent.git
+      url: https://YOUR_GITHUB_TOKEN@github.com/trustarc/trustarc-mobile-consent.git
       ref: $version
       path: flutter"
 
@@ -101,15 +101,6 @@ add_trustarc_to_pubspec() {
     echo "$sdk_entry" >> "$temp_file"
     tail -n +$((insert_line)) "$pubspec" >> "$temp_file"
     mv "$temp_file" "$pubspec"
-
-    # Replace ${TRUSTARC_TOKEN} with actual token value
-    if [ -n "$TRUSTARC_TOKEN" ]; then
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' "s/\${TRUSTARC_TOKEN}/$TRUSTARC_TOKEN/g" "$pubspec"
-        else
-            sed -i "s/\${TRUSTARC_TOKEN}/$TRUSTARC_TOKEN/g" "$pubspec"
-        fi
-    fi
 
     # Clean up backup
     rm -f "$pubspec.backup"

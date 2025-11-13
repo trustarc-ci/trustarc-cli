@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Margins and Padding -->
+    <dimen name="margin_standard">16dp</dimen>
+    <dimen name="margin_small">8dp</dimen>
+    <dimen name="margin_large">24dp</dimen>
+    <dimen name="padding_standard">16dp</dimen>
+    <dimen name="padding_small">8dp</dimen>
+    <dimen name="padding_large">24dp</dimen>
+    
+    <!-- Corner Radius -->
+    <dimen name="corner_radius_card">12dp</dimen>
+    <dimen name="corner_radius_button">12dp</dimen>
+    
+    <!-- Button Heights -->
+    <dimen name="button_height_primary">56dp</dimen>
+    <dimen name="button_height_secondary">48dp</dimen>
+    
+    <!-- Card Heights -->
+    <dimen name="status_card_height">64dp</dimen>
+    <dimen name="feature_widget_height">80dp</dimen>
+    
+    <!-- Indicator Size -->
+    <dimen name="status_indicator_size">8dp</dimen>
+    
+    <!-- Elevation -->
+    <dimen name="card_elevation">8dp</dimen>
+    
+    <!-- Text Sizes -->
+    <dimen name="text_size_header">18sp</dimen>
+    <dimen name="text_size_body">16sp</dimen>
+    <dimen name="text_size_label">14sp</dimen>
+    
+    <!-- Touch Target -->
+    <dimen name="touch_target_min">48dp</dimen>
+</resources>

@@ -58,7 +58,7 @@ update_config_files() {
             # Update Android settings.gradle with token
             local android_settings="$app_dir/settings.gradle"
             if [ -f "$android_settings" ] && [ -n "$TRUSTARC_TOKEN" ]; then
-                sed -i.bak "s|your-token-here|$TRUSTARC_TOKEN|g" "$android_settings"
+                sed -i.bak "s|YOUR_TRUSTARC_TOKEN|$TRUSTARC_TOKEN|g" "$android_settings"
                 rm -f "${android_settings}.bak"
                 print_success "Updated Android settings.gradle with authentication token"
             fi
@@ -76,6 +76,14 @@ update_config_files() {
                 print_success "Updated React Native app.config.ts"
             else
                 print_warning "React Native config file not found at: $rn_config"
+            fi
+
+            # Update React Native app.json with token (for Android Maven credentials)
+            local rn_appjson="$app_dir/app.json"
+            if [ -f "$rn_appjson" ] && [ -n "$TRUSTARC_TOKEN" ]; then
+                sed -i.bak "s|YOUR_TRUSTARC_TOKEN|$TRUSTARC_TOKEN|g" "$rn_appjson"
+                rm -f "${rn_appjson}.bak"
+                print_success "Updated React Native app.json with authentication token"
             fi
 
             # Update React Native .npmrc with token (if it doesn't already use env var)
@@ -147,31 +155,37 @@ download_sample_app() {
     local domain=$2
     local website=$3
 
-    # Map platform to API format
+    # Map platform to directory name
     local platform_type=""
+    local platform_dir=""
     case "$platform" in
         "ios")
             platform_type="ios"
+            platform_dir="ios"
             ;;
         "android")
             platform_type="android"
+            platform_dir="android"
             ;;
         "react-native")
             platform_type="react-native"
+            platform_dir="react"
             ;;
         "flutter")
             platform_type="flutter"
+            platform_dir="flutter"
             ;;
     esac
 
-    local download_url="https://mobile-consent.trustarc.com/api/platform/${platform_type}/${domain}/download?website=${website}"
-    local output_file="trustarc-sample-${platform_type}.zip"
+    local github_repo_url="https://github.com/trustarc-ci/trustarc-cli/archive/refs/heads/main.zip"
+    local temp_zip="trustarc-cli-temp-$$.zip"
+    local temp_dir="trustarc-cli-temp-$$"
     local extract_dir="trustarc-sample-${platform_type}"
 
     # Check if already extracted
     if [ -d "$extract_dir" ]; then
         echo ""
-        print_warning "Found existing extracted sample application at: $extract_dir"
+        print_warning "Found existing sample application at: $extract_dir"
         read -p "Do you want to re-download and replace it? (y/n): " redownload
 
         if [ "$redownload" != "y" ] && [ "$redownload" != "Y" ]; then
@@ -181,7 +195,6 @@ download_sample_app() {
         else
             print_info "Removing existing directory..."
             rm -rf "$extract_dir"
-            rm -f "$output_file"
         fi
     fi
 
@@ -190,77 +203,56 @@ download_sample_app() {
     print_info "  Platform: $platform_type"
     print_info "  Domain: $domain"
     print_info "  Website: $website"
-    print_info "  URL: $download_url"
+    print_info "  Source: GitHub Repository"
     echo ""
-    print_info "Downloading sample application..."
+    print_info "Downloading sample application from GitHub..."
 
-    # Download with curl or wget and capture HTTP status
-    local http_code=""
+    # Download repo zip
     if command -v curl >/dev/null 2>&1; then
-        if [ -n "$TRUSTARC_TOKEN" ]; then
-            http_code=$(curl -L -w "%{http_code}" -H "Authorization: token $TRUSTARC_TOKEN" "$download_url" -o "$output_file" 2>/dev/null)
-        else
-            http_code=$(curl -L -w "%{http_code}" "$download_url" -o "$output_file" 2>/dev/null)
-        fi
+        curl -fsSL "$github_repo_url" -o "$temp_zip" || {
+            print_error "Failed to download from GitHub"
+            return 1
+        }
     elif command -v wget >/dev/null 2>&1; then
-        if [ -n "$TRUSTARC_TOKEN" ]; then
-            wget --server-response --header="Authorization: token $TRUSTARC_TOKEN" "$download_url" -O "$output_file" 2>&1 | tee /tmp/wget_output.tmp >/dev/null
-        else
-            wget --server-response "$download_url" -O "$output_file" 2>&1 | tee /tmp/wget_output.tmp >/dev/null
-        fi
-        http_code=$(grep "HTTP/" /tmp/wget_output.tmp | tail -1 | awk '{print $2}')
-        rm -f /tmp/wget_output.tmp
+        wget -q "$github_repo_url" -O "$temp_zip" || {
+            print_error "Failed to download from GitHub"
+            return 1
+        }
+    else
+        print_error "Neither curl nor wget is available"
+        return 1
     fi
 
-    print_info "HTTP Response: $http_code"
+    print_success "Downloaded repository archive"
 
-    # Check if file exists and is valid
-    if [ -f "$output_file" ]; then
-        # Check if it's actually a zip file or an error page
-        file_type=$(file -b "$output_file" 2>/dev/null || echo "unknown")
+    # Extract the specific platform folder
+    echo ""
+    print_info "Extracting $platform_type sample application..."
 
-        if echo "$file_type" | grep -qi "zip\|archive"; then
-            print_success "Sample application downloaded: $output_file"
+    # Create temp directory
+    mkdir -p "$temp_dir"
 
-            # Auto-extract the zip file
-            echo ""
-            print_info "Extracting sample application..."
+    # Extract only the platforms folder we need
+    if unzip -q "$temp_zip" "trustarc-cli-main/platforms/${platform_dir}/*" -d "$temp_dir" 2>/dev/null; then
+        # Move the platform folder to final location
+        if [ -d "$temp_dir/trustarc-cli-main/platforms/${platform_dir}" ]; then
+            mv "$temp_dir/trustarc-cli-main/platforms/${platform_dir}" "$extract_dir"
+            print_success "Extracted to: $extract_dir/"
 
-            if unzip -q "$output_file" -d "$extract_dir" 2>/dev/null; then
-                print_success "Extracted to: $extract_dir/"
-
-                # Update configuration files with user's choices
-                update_config_files "$platform_type" "$extract_dir" "$domain" "$website"
-
-                # Clean up zip file after successful extraction
-                rm -f "$output_file"
-                print_info "Cleaned up download file: $output_file"
-            else
-                print_error "Failed to extract zip file - file may be corrupted"
-            fi
+            # Update configuration files with user's choices
+            update_config_files "$platform_type" "$extract_dir" "$domain" "$website"
         else
-            # File is not a zip, likely an error page
-            print_error "Download failed - received an error page instead of zip file"
-            print_error "HTTP Status: $http_code"
-
-            # Show first few lines of the error
-            if grep -q "Whitelabel Error Page\|Internal Server Error" "$output_file" 2>/dev/null; then
-                echo ""
-                print_warning "Server Error Details:"
-                head -10 "$output_file" | sed 's/^/  /'
-                echo ""
-                print_info "Possible issues:"
-                echo "  - Invalid platform type (must be: ios, android, react-native, flutter)"
-                echo "  - Invalid domain format"
-                echo "  - Invalid website URL"
-                echo "  - Server-side error"
-            fi
-
-            # Clean up the invalid file
-            rm -f "$output_file"
+            print_error "Platform directory not found in archive"
+            rm -rf "$temp_dir" "$temp_zip"
+            return 1
         fi
     else
-        print_error "Failed to download sample application"
-        print_error "HTTP Status: $http_code"
+        print_error "Failed to extract sample application"
+        rm -rf "$temp_dir" "$temp_zip"
+        return 1
     fi
+
+    # Clean up
+    rm -rf "$temp_dir" "$temp_zip"
+    print_info "Cleaned up temporary files"
 }

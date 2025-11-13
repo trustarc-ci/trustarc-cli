@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="ContentSection">
+        <item name="android:background">@drawable/content_section_background</item>
+    </style>
+    
+    <style name="StatusCard">
+        <item name="android:background">@drawable/status_card_background</item>
+    </style>
+</resources>
