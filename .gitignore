@@ -67,6 +67,13 @@ Pods/
 Podfile.lock
 *.xcworkspace
 
+# BUT allow these files in platforms/ demo apps
+!platforms/**/*.xcworkspace
+
+# BUT exclude user-specific Xcode files even in platforms/
+platforms/**/xcuserdata/
+platforms/**/*UserInterfaceState.xcuserstate
+
 # Android / Gradle
 *.iml
 .gradle
@@ -94,6 +101,12 @@ out/
 gradle.properties
 gradlew
 gradlew.bat
+
+# BUT allow these files in platforms/ demo apps
+!platforms/**/gradle.properties
+!platforms/**/gradlew
+!platforms/**/gradlew.bat
+!platforms/**/local.properties
 
 # React Native / Expo
 node_modules/
@@ -188,6 +201,10 @@ dist
 package-lock.json
 yarn.lock
 
+# BUT allow these files in platforms/ demo apps
+!platforms/**/package-lock.json
+!platforms/**/yarn.lock
+
 # Build outputs and generated files
 build/
 dist/
@@ -218,6 +235,10 @@ credentials.*
 *.crt
 *.der
 *.pfx
+
+# BUT allow .env files in platforms/ demo apps
+!platforms/**/.env
+!platforms/**/.env.*
 
 # Test coverage
 coverage/
