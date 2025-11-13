@@ -1,6 +1,5 @@
-import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
-
-const { TrustArcMobileSdk } = NativeModules;
+import { NativeModules, NativeEventEmitter } from 'react-native';
+import { SdkMode, TrustArcSdk } from '@trustarc/trustarc-react-native-consent-sdk';
 
 /**
  * TrustArc Consent Manager Implementation for React Native
@@ -27,13 +26,6 @@ class TrustArcConsentImpl {
   static instance;
 
   constructor() {
-    if (!TrustArcMobileSdk) {
-      throw new Error(
-        'TrustArcMobileSdk native module not found. Make sure the SDK is properly installed and linked.'
-      );
-    }
-
-    this.eventEmitter = new NativeEventEmitter(TrustArcMobileSdk);
     this.consentChangeListeners = [];
     this.googleConsentChangeListeners = [];
     this.sdkInitListeners = [];
@@ -41,12 +33,21 @@ class TrustArcConsentImpl {
     this.isReady = false;
 
     // Configuration - update with your domain
-    this.DOMAIN = '__TRUSTARC_DOMAIN_PLACEHOLDER__';
+    this.DOMAIN = 'na_smashburger_app.com';
     this.IP_ADDRESS = ''; // Optional: set user IP for GDPR detection
     this.LANGUAGE = 'en'; // Optional: set language code
     this.ENABLE_DEBUG_LOGS = true;
 
-    this.setupEventListeners();
+    // Only initialize SDK components if native module is available
+    if (NativeModules.TrustArcMobileSdk) {
+      this.trustArcSdk = new TrustArcSdk();
+      this.eventEmitter = new NativeEventEmitter(NativeModules.TrustArcMobileSdk);
+      this.setupEventListeners();
+    } else {
+      console.warn('[TrustArc] Native module not available. SDK features will be disabled.');
+      this.trustArcSdk = null;
+      this.eventEmitter = null;
+    }
   }
 
   /**
@@ -96,6 +97,11 @@ class TrustArcConsentImpl {
    * @returns Promise<void>
    */
   async initialize() {
+    if (!this.trustArcSdk) {
+      console.warn('[TrustArc] SDK not available. Skipping initialization.');
+      return;
+    }
+
     if (this.isInitialized) {
       console.log('[TrustArc] Already initialized, skipping');
       return;
@@ -104,11 +110,13 @@ class TrustArcConsentImpl {
     try {
       console.log(`[TrustArc] Initializing SDK with domain: ${this.DOMAIN}`);
 
+      await this.trustArcSdk.enableDebugLog(this.ENABLE_DEBUG_LOGS);
+
       // Initialize the native SDK
-      await TrustArcMobileSdk.initialize();
+      await this.trustArcSdk.initialize(SdkMode.standard);
 
       // Start the SDK with configuration
-      await TrustArcMobileSdk.start(this.DOMAIN, this.IP_ADDRESS, this.LANGUAGE);
+      await this.trustArcSdk.start(this.DOMAIN, this.IP_ADDRESS, this.LANGUAGE);
 
       this.isInitialized = true;
       console.log('[TrustArc] SDK initialized successfully');
@@ -134,7 +142,7 @@ class TrustArcConsentImpl {
 
     try {
       console.log('[TrustArc] Opening consent management dialog');
-      await TrustArcMobileSdk.openCM();
+      await this.trustArcSdk.openCM();
     } catch (error) {
       console.error('[TrustArc] Failed to open consent dialog:', error);
       throw error;
@@ -152,7 +160,7 @@ class TrustArcConsentImpl {
     }
 
     try {
-      const consentData = await TrustArcMobileSdk.getConsentDataByCategory();
+      const consentData = await this.trustArcSdk.getConsentDataByCategory();
       return consentData || {};
     } catch (error) {
       console.error('[TrustArc] Failed to get consent data:', error);
@@ -172,7 +180,7 @@ class TrustArcConsentImpl {
     }
 
     try {
-      return await TrustArcMobileSdk.getConsentValue(trackerId);
+      return await this.trustArcSdk.getConsentValue(trackerId);
     } catch (error) {
       console.error(`[TrustArc] Failed to get consent value for tracker ${trackerId}:`, error);
       return null;
@@ -191,7 +199,7 @@ class TrustArcConsentImpl {
     }
 
     try {
-      return await TrustArcMobileSdk.getTcfString();
+      return await this.trustArcSdk.getTcfString();
     } catch (error) {
       console.error('[TrustArc] Failed to get TCF string:', error);
       return null;
@@ -209,7 +217,7 @@ class TrustArcConsentImpl {
     }
 
     try {
-      const googleConsents = await TrustArcMobileSdk.getGoogleConsents();
+      const googleConsents = await this.trustArcSdk.getGoogleConsents();
       return googleConsents || {};
     } catch (error) {
       console.error('[TrustArc] Failed to get Google consents:', error);
@@ -228,7 +236,7 @@ class TrustArcConsentImpl {
     }
 
     try {
-      return await TrustArcMobileSdk.getWebScript();
+      return await this.trustArcSdk.getWebScript();
     } catch (error) {
       console.error('[TrustArc] Failed to get web script:', error);
       return null;
@@ -247,7 +255,7 @@ class TrustArcConsentImpl {
     }
 
     try {
-      const preferences = await TrustArcMobileSdk.getSharedPreferences();
+      const preferences = await this.trustArcSdk.getSharedPreferences();
       return preferences || {};
     } catch (error) {
       console.error('[TrustArc] Failed to get shared preferences:', error);
@@ -354,8 +362,8 @@ class TrustArcConsentImpl {
   }
 }
 
-// Export singleton instance for convenience
-export default TrustArcConsentImpl.getInstance();
+// Export the class as default
+export default TrustArcConsentImpl;
 
-// Also export the class for direct access
+// Also export a named export for the class
 export { TrustArcConsentImpl };
