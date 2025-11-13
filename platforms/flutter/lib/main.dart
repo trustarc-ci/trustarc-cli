@@ -33,7 +33,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 // === APP CONFIGURATION ===
 /// Default domain name for TrustArc SDK initialization
 /// This serves as a fallback if the .env file is not available or MAC_DOMAIN is not set
-const String kDefaultDomainName = "app.mattel.speedway";
+const String kDefaultDomainName = "mac_trustarc.com";
 
 // === ENVIRONMENT VARIABLE GETTERS ===
 /// Get TrustArc domain name from environment variables or fallback to default

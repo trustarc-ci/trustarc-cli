@@ -38,7 +38,7 @@ object AppConfig {
      * 
      * IMPORTANT: Replace "mac_trustarc.com" with your actual domain for production use
      */
-    const val MAC_DOMAIN: String = "app.mattel.speedway"
+    const val MAC_DOMAIN: String = "mac_trustarc.com"
     
     // ===== TEST WEBSITE CONFIGURATION =====
     
