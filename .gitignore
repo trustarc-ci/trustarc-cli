@@ -204,6 +204,8 @@ yarn.lock
 # BUT allow these files in platforms/ demo apps
 !platforms/**/package-lock.json
 !platforms/**/yarn.lock
+!platforms/flutter/.env
+!platforms/flutter/env.example
 
 # Build outputs and generated files
 build/

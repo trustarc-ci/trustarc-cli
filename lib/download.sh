@@ -102,6 +102,19 @@ update_config_files() {
             ;;
 
         "flutter")
+            # Update Flutter .env file
+            local flutter_env="$app_dir/.env"
+            if [ -f "$flutter_env" ]; then
+                # Update MAC_DOMAIN
+                sed -i.bak "s/^MAC_DOMAIN=.*/MAC_DOMAIN=$domain/" "$flutter_env"
+                # Update TEST_WEBSITE_URL
+                sed -i.bak "s|^TEST_WEBSITE_URL=.*|TEST_WEBSITE_URL=$website|" "$flutter_env"
+                rm -f "${flutter_env}.bak"
+                print_success "Updated Flutter .env file"
+            else
+                print_warning "Flutter .env file not found at: $flutter_env"
+            fi
+
             # Update Flutter main.dart
             local flutter_config="$app_dir/lib/main.dart"
             if [ -f "$flutter_config" ]; then
