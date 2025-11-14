@@ -162,42 +162,6 @@ update_config_files() {
     print_info "Website: $website"
 }
 
-# Create a flattened ZIP archive of the downloaded sample app
-create_sample_archive() {
-    local source_dir=$1
-    local archive_path=$2
-
-    if [ ! -d "$source_dir" ]; then
-        print_error "Cannot package app - directory not found: $source_dir"
-        return 1
-    fi
-
-    if ! command -v zip >/dev/null 2>&1; then
-        print_warning "zip command not found; skipping archive creation"
-        return 0
-    fi
-
-    local archive_dir archive_file archive_abs
-    archive_dir=$(dirname "$archive_path")
-    archive_file=$(basename "$archive_path")
-    mkdir -p "$archive_dir"
-
-    # Resolve archive path to an absolute location so we can safely cd
-    archive_dir=$(cd "$archive_dir" && pwd)
-    archive_abs="${archive_dir}/${archive_file}"
-
-    # Always replace the previous archive to avoid stale content
-    rm -f "$archive_abs"
-
-    print_info "Creating ZIP archive (${archive_file})..."
-    if (cd "$source_dir" && zip -qr "$archive_abs" .); then
-        print_success "Created ZIP archive: ${archive_path}"
-    else
-        print_error "Failed to create ZIP archive"
-        return 1
-    fi
-}
-
 # Download sample application
 download_sample_app() {
     local platform=$1
@@ -230,7 +194,6 @@ download_sample_app() {
     local temp_zip="trustarc-cli-temp-$$.zip"
     local temp_dir="trustarc-cli-temp-$$"
     local extract_dir="trustarc-sample-${platform_type}"
-    local archive_name="${extract_dir}.zip"
 
     # Check if already extracted
     if [ -d "$extract_dir" ]; then
@@ -241,12 +204,10 @@ download_sample_app() {
         if [ "$redownload" != "y" ] && [ "$redownload" != "Y" ]; then
             print_info "Skipping download, updating existing configuration..."
             update_config_files "$platform_type" "$extract_dir" "$domain" "$website"
-            create_sample_archive "$extract_dir" "$archive_name"
             return 0
         else
             print_info "Removing existing directory..."
             rm -rf "$extract_dir"
-            rm -f "$archive_name"
         fi
     fi
 
@@ -293,7 +254,6 @@ download_sample_app() {
 
             # Update configuration files with user's choices
             update_config_files "$platform_type" "$extract_dir" "$domain" "$website"
-            create_sample_archive "$extract_dir" "$archive_name"
         else
             print_error "Platform directory not found in archive"
             rm -rf "$temp_dir" "$temp_zip"
