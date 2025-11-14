@@ -42,7 +42,7 @@ const String kDefaultTestWebsiteUrl = 'https://trustarc.com';
 /// Get test website URL from environment variables or fallback to default
 ///
 /// Environment variable: TEST_WEBSITE_URL
-/// Fallback: kDefaultTestWebsiteUrl (Smashburger demo site)
+/// Fallback: kDefaultTestWebsiteUrl (TrustArc demo site)
 ///
 /// @returns String URL for WebView testing
 String get testWebsiteUrl {
