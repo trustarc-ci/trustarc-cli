@@ -33,7 +33,7 @@ class TrustArcConsentImpl {
     this.isReady = false;
 
     // Configuration - update with your domain
-    this.DOMAIN = 'na_smashburger_app.com';
+    this.DOMAIN = 'mac_trustarc.com';
     this.IP_ADDRESS = ''; // Optional: set user IP for GDPR detection
     this.LANGUAGE = 'en'; // Optional: set language code
     this.ENABLE_DEBUG_LOGS = true;
