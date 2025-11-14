@@ -51,7 +51,7 @@ class AppConfig {
      * 
      * IMPORTANT: Replace "mac_trustarc.com" with your actual domain for production use
      */
-    let macDomain: String = "na_smashburger_app.com"
+    let macDomain: String = "mac_trustarc.com"
     
     // ===== TEST WEBSITE CONFIGURATION =====
     
