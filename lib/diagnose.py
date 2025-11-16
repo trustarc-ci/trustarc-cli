@@ -10,7 +10,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -61,6 +61,9 @@ class DiagnosticReport:
     sdk_found: bool
     initialization_found: bool
     score: int  # 0-100
+    ai_questions: List[Dict[str, str]] = field(default_factory=list)
+    platform_neurolink: Optional[str] = None
+    guide_insights: List[Dict[str, str]] = field(default_factory=list)
 
     def to_dict(self):
         return {
@@ -69,9 +72,208 @@ class DiagnosticReport:
             'sdk_found': self.sdk_found,
             'initialization_found': self.initialization_found,
             'score': self.score,
-            'issues': [issue.to_dict() for issue in self.issues]
+            'issues': [issue.to_dict() for issue in self.issues],
+            'ai_questions': self.ai_questions,
+            'platform_neurolink': self.platform_neurolink,
+            'guide_insights': self.guide_insights
         }
 
+
+class AIReasoner:
+    """Lightweight AI helper to craft contextual questions and insights."""
+
+    CATEGORY_TEMPLATES = {
+        "Dependency": "How is the TrustArc SDK dependency declared in your {platform} build setup?",
+        "Initialization": "Where do you initialize the TrustArc SDK within the {platform} lifecycle?",
+        "Permissions": "Are the required permissions enabled for TrustArc network calls on {platform}?",
+        "Configuration": "How is the TrustArc domain or configuration persisted across {platform} builds?",
+        "Implementation": "Does the TrustArc API usage map to the intended user journey on {platform}?",
+        "Architecture": "Does the project structure surface a stable entry point for TrustArc flows on {platform}?",
+        "Platform": "Is the detected platform ({platform}) aligned with the project you selected?",
+    }
+
+    PLATFORM_BEHAVIOR = {
+        Platform.ANDROID: "Android checks trace Gradle dependencies, manifest permissions, and lifecycle calls like start() and openCM().",
+        Platform.IOS: "iOS diagnostics observe CocoaPods dependency wiring, AppDelegate hooks, and Swift/Obj-C consent manager usage.",
+        Platform.REACT_NATIVE: "React Native logic inspects metro configs, JS bridge calls, and native module registrations for TrustArc.",
+        Platform.FLUTTER: "Flutter scanning follows pubspec dependencies, Dart channel wiring, and platform channel invocations.",
+        Platform.UNKNOWN: "No known platform signature was detected; heuristics could not map the project to Android, iOS, React Native, or Flutter.",
+    }
+
+    SEVERITY_PRIORITY = {
+        Severity.ERROR: 0,
+        Severity.WARNING: 1,
+        Severity.INFO: 2,
+        Severity.SUCCESS: 3,
+    }
+
+    def __init__(self, report: DiagnosticReport):
+        self.report = report
+        self.guide_entries = GuideKnowledge.get_entries(report.platform)
+
+    def generate_context_questions(self) -> List[Dict[str, str]]:
+        """Create context-aware Q&A prompts based on detected issues."""
+        prioritized = sorted(self.report.issues, key=self._issue_priority)
+        qa_pairs: List[Dict[str, str]] = []
+
+        for issue in prioritized:
+            if issue.severity not in (Severity.ERROR, Severity.WARNING):
+                continue
+
+            qa_pairs.append({
+                "question": self._build_question_prompt(issue),
+                "answer": self._build_answer_prompt(issue)
+            })
+
+            if len(qa_pairs) >= 5:
+                break
+
+        if not qa_pairs:
+            qa_pairs.append(self._default_question())
+
+        return qa_pairs
+
+    def generate_platform_neurolink(self) -> str:
+        """Summarize platform behaviors and SDK usage in a concise neurolink."""
+        platform_blurb = self.PLATFORM_BEHAVIOR.get(self.report.platform, self.PLATFORM_BEHAVIOR[Platform.UNKNOWN])
+        errors = len([i for i in self.report.issues if i.severity == Severity.ERROR])
+        warnings = len([i for i in self.report.issues if i.severity == Severity.WARNING])
+        infos = len([i for i in self.report.issues if i.severity == Severity.INFO])
+        categories = sorted({issue.category for issue in self.report.issues})
+
+        status_bits = [
+            "SDK dependency detected" if self.report.sdk_found else "SDK dependency not observed",
+            "Initialization sequence confirmed" if self.report.initialization_found else "Initialization entry point missing",
+            f"Issue categories touched: {', '.join(categories)}" if categories else "No categorized issues recorded",
+            f"Signal strength → {errors} errors / {warnings} warnings / {infos} info items",
+        ]
+
+        doc_hint = GuideKnowledge.get_hint(self.report.platform, "Guide Summary")
+        if doc_hint:
+            status_bits.append(f"Guide v3.1: {doc_hint.rstrip('.')}")
+
+        neurolink = f"{platform_blurb} Neurolink synthesis: " + "; ".join(status_bits) + "."
+        return neurolink
+
+    def _issue_priority(self, issue: Issue) -> int:
+        return self.SEVERITY_PRIORITY.get(issue.severity, 99)
+
+    def _build_question_prompt(self, issue: Issue) -> str:
+        template = self.CATEGORY_TEMPLATES.get(
+            issue.category,
+            "What adjustments are required around {category} to resolve \"{message}\" on {platform}?"
+        )
+        return template.format(
+            platform=self.report.platform.value,
+            category=issue.category.lower(),
+            message=issue.message
+        )
+
+    def _build_answer_prompt(self, issue: Issue) -> str:
+        context_bits = [f"{issue.severity.value.upper()} detected: {issue.message}"]
+        if issue.file_path:
+            context_bits.append(f"File: {issue.file_path}")
+        if issue.line_number:
+            context_bits.append(f"Line: {issue.line_number}")
+        if issue.suggestion:
+            context_bits.append(f"Suggested action: {issue.suggestion}")
+        guide_hint = GuideKnowledge.get_hint(self.report.platform, issue.category)
+        if guide_hint:
+            context_bits.append(f"Guide v3.1 hint: {guide_hint.rstrip('.')}")
+        return "AI reasoning → " + " | ".join(context_bits)
+
+    def _default_question(self) -> Dict[str, str]:
+        question = f"Where in the {self.report.platform.value} project lifecycle should the TrustArc SDK reasoning live?"
+        guide_hint = GuideKnowledge.get_hint(self.report.platform, "Guide Summary")
+        if guide_hint:
+            answer_hint = f"Guide v3.1 hint: {guide_hint.rstrip('.')}"
+        else:
+            answer_hint = "Guide v3.1 hint: Ensure you're following the official onboarding steps for your platform."
+        answer = (
+            "AI reasoning → The diagnostic run did not surface blocking issues, so double-check that "
+            "TrustArc initialization aligns with your first screen or app delegate to keep consent flows predictable. "
+            f"{answer_hint}"
+        )
+        return {"question": question, "answer": answer}
+
+
+class GuideKnowledge:
+    """Embeds curated context from the TrustArc Mobile App Consent Integration Guide v3.1."""
+
+    GUIDE_ENTRIES = {
+        Platform.ANDROID: [
+            ("Guide Summary", "Guide v3.1 describes onboarding via TrustArc support, authenticating to the GitHub Maven repo "
+             "at https://maven.pkg.github.com/trustarc/trustarc-mobile-consent, and keeping the personal access token secure."),
+            ("Dependencies", "Add com.trustarc:trustarc-consent-sdk:2025.04.2 plus the AndroidX stack "
+             "(core-ktx, appcompat, constraintlayout, webkit, lifecycle, activity, material, retrofit + gson)."),
+            ("Initialization & Consent", "Instantiate TrustArc(context, sdkMode, onGoogleConsent) then call start(domainName, onConsent). "
+             "Use getStoredConsentData or getConsentsByCategory (added in 2025.07.1) which emits 2/1/0 values and suffixes -0…-3 per category."),
+            ("Google Consent Mode", "Wire Firebase + Google's consent delegate so ads_storage, analytics_storage, ad_personalization, "
+             "and ad_user_data signals match the UI choices surfaced by the TrustArc SDK.")
+        ],
+        Platform.IOS: [
+            ("Guide Summary", "Guide v3.1 walks through pulling trustarc-mobile-consent.git into Xcode via Swift Package Manager "
+             "using the release branch or tags such as v2025.04.02 and verifying the signed package."),
+            ("Dependencies", "Requirements call for Xcode 16+, iOS 12+, Swift 6 (source-compatible with Swift 5), "
+             "and authenticated GitHub package access (username trustarc + token)."),
+            ("Initialization & Consent", "Mark UI-facing classes with @MainActor, set TrustArc.sharedInstance delegates, "
+             "configure domain + mode, and call start(...) to optionally show the consent UI. "
+             "Handle TAConsentViewControllerDelegate.didReceiveConsentData and leverage getConsentDataByCategory "
+             "where 2/1/0 encode required/consented/rejected domains."),
+            ("App Tracking", "Populate NSUserTrackingUsageDescription and, when using ATT, request tracking permission after "
+             "TrustArc signals shouldShowConsentUI.")
+        ],
+        Platform.REACT_NATIVE: [
+            ("Guide Summary", "Guide v3.1 directs you to export TRUSTARC_TOKEN, add .npmrc that routes @trustarc scope to GitHub Packages, "
+             "and depend on @trustarc/trustarc-react-native-consent-sdk (React Native 0.60+)."),
+            ("Project Wiring", "Expo builds must add extraMavenRepos with the GitHub URL + credentials and provide "
+             "NSUserTrackingUsageDescription for iOS; bare projects install pods in ios/."),
+            ("Initialization & Consent", "Instantiate TrustArcSdk, call initialize/start with the MAC domain, and listen for "
+             "onSdkInitFinish and onConsentChanges via NativeEventEmitter. Parse getStoredConsentData JSON to split "
+             "domains by suffix (-0 to -3) and apply tracking."),
+        ],
+        Platform.FLUTTER: [
+            ("Guide Summary", "Guide v3.1 instructs exporting TRUSTARC_TOKEN, adding flutter_trustarc_mobile_consent_sdk "
+             "from the trustarc-mobile-consent.git (path flutter, ref release or tagged), and running flutter pub get."),
+            ("Initialization & Consent", "Instantiate FlutterTrustarcMobileConsentSdk, call initialize + start, subscribe to "
+             "onSdkInitFinish/onConsentChanges/onGoogleConsentChanges, and process getStoredConsentData or "
+             "getConsentDataByCategory (since 2025.07.1) where suffixes signal required/functional/advertising/custom buckets."),
+            ("UI Hooks", "Expose a UI control such as an ElevatedButton to openCM(domain, ''), and surface toast/log output "
+             "when consent or Google consent events fire."),
+        ]
+    }
+
+    CATEGORY_TOPIC = {
+        "Dependency": "Dependencies",
+        "Permissions": "Dependencies",
+        "Initialization": "Initialization & Consent",
+        "Implementation": "Initialization & Consent",
+        "Configuration": "Initialization & Consent",
+        "Architecture": "Guide Summary",
+        "Platform": "Guide Summary",
+    }
+
+    @classmethod
+    def get_entries(cls, platform: Platform) -> List[Tuple[str, str]]:
+        return cls.GUIDE_ENTRIES.get(platform, [])
+
+    @classmethod
+    def get_hint(cls, platform: Platform, category: str) -> Optional[str]:
+        entries = cls.get_entries(platform)
+        if not entries:
+            return None
+
+        title = cls.CATEGORY_TOPIC.get(category, "Guide Summary")
+        for entry_title, detail in entries:
+            if entry_title == title:
+                return detail
+
+        # Fall back to summary if nothing matches
+        for entry_title, detail in entries:
+            if "Summary" in entry_title:
+                return detail
+
+        return entries[0][1]
 
 class AndroidDiagnostic:
     """Android-specific diagnostic checks"""
@@ -878,7 +1080,7 @@ class ProjectDiagnostic:
         # Calculate score
         score = self.calculate_score(issues, sdk_found, initialization_found)
 
-        return DiagnosticReport(
+        report = DiagnosticReport(
             platform=self.platform,
             project_path=str(self.project_path),
             issues=issues,
@@ -886,6 +1088,18 @@ class ProjectDiagnostic:
             initialization_found=initialization_found,
             score=score
         )
+
+        guide_entries = GuideKnowledge.get_entries(self.platform)
+        report.guide_insights = [
+            {"title": title, "detail": detail}
+            for title, detail in guide_entries
+        ]
+
+        reasoner = AIReasoner(report)
+        report.ai_questions = reasoner.generate_context_questions()
+        report.platform_neurolink = reasoner.generate_platform_neurolink()
+
+        return report
 
     def calculate_score(self, issues: List[Issue], sdk_found: bool, initialization_found: bool) -> int:
         """Calculate diagnostic score (0-100)"""
@@ -964,6 +1178,36 @@ def format_report_text(report: DiagnosticReport) -> str:
             lines.append(f"  [{issue.category}] {issue.message}")
             if issue.suggestion:
                 lines.append(f"    → {issue.suggestion}")
+            lines.append("")
+
+    if report.guide_insights:
+        lines.append("Guide Insights (Mobile App Consent Integration Guide v3.1)")
+        lines.append("-" * 80)
+        for entry in report.guide_insights:
+            title = entry.get("title", "Insight")
+            detail = entry.get("detail", "").strip()
+            if detail:
+                lines.append(f"- {title}: {detail}")
+            else:
+                lines.append(f"- {title}")
+        lines.append("")
+
+    if report.platform_neurolink:
+        lines.append("AI Neurolink")
+        lines.append("-" * 80)
+        lines.append(report.platform_neurolink)
+        lines.append("")
+
+    if report.ai_questions:
+        lines.append("Ask Questions (Q&A)")
+        lines.append("-" * 80)
+        for idx, qa in enumerate(report.ai_questions, start=1):
+            question = qa.get("question", "").strip()
+            answer = qa.get("answer", "").strip()
+            if question:
+                lines.append(f"Q{idx}: {question}")
+            if answer:
+                lines.append(f"A{idx}: {answer}")
             lines.append("")
 
     lines.append("=" * 80)
