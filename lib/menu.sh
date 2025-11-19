@@ -3,19 +3,24 @@
 # Menu functions for TrustArc CLI
 # This file contains interactive menu and workflow functions
 
+# Print consistent menu option formatting
+print_menu_option() {
+    local option_number="$1"
+    local option_text="$2"
+    printf "  ${BLUE}${BOLD}%s${NC}) %s\n" "$option_number" "$option_text"
+}
+
 # Main menu
 show_main_menu() {
     print_header "TrustArc Mobile Consent SDK 0.1-alpha"
 
-    echo "What would you like to do?"
+    printf "${BLUE}What would you like to do?${NC}\n\n"
+    print_menu_option "1" "Integrate SDK into project"
+    print_menu_option "2" "Download sample application"
+    print_menu_option "3" "Clean up (remove token and config)"
+    print_menu_option "4" "Exit"
     echo ""
-    echo "  ${BOLD}1${NC}) Integrate SDK into project"
-    echo "  ${BOLD}2${NC}) Download sample application"
-    echo "  ${BOLD}3${NC}) Diagnose project"
-    echo "  ${BOLD}4${NC}) Clean up (remove token and config)"
-    echo "  ${BOLD}5${NC}) Exit"
-    echo ""
-    read -p "Enter your choice (1-5): " main_choice
+    read -p $'\033[0;34mEnter your choice (1-4): \033[0m' main_choice
 
     case "$main_choice" in
         1)
@@ -25,15 +30,12 @@ show_main_menu() {
             download_sample_menu
             ;;
         3)
-            diagnose_project_menu
-            ;;
-        4)
             cleanup_trustarc
             ;;
-        5)
+        4)
             echo ""
             print_info "Configuration saved to: $CONFIG_FILE"
-            print_substep "Run option 4 to clean up when you no longer need it"
+            print_substep "Run option 3 to clean up when you no longer need it"
             echo ""
             exit 0
             ;;
@@ -257,7 +259,7 @@ integrate_sdk() {
     else
         echo ""
         print_error "Could not detect platform type"
-        print_info "Supported platforms:"
+        print_info "Supported platforms (integration requires GitHub token with repo + read:package scopes):"
         echo "  - iOS (Swift Package Manager / CocoaPods)"
         echo "  - Android"
         echo "  - React Native"
