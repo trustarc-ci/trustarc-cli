@@ -6,11 +6,11 @@
 # Validate GitHub token
 validate_github_token() {
     local token=$1
-    local repo_url="https://api.github.com/repos/trustarc/trustarc-mobile-consent"
+    local repo_url="https://api.github.com/repos/trustarc/ccm-mobile-consent-test-apps"
 
     echo ""
     print_info "Validating GitHub token..."
-    print_info "Repository: trustarc/trustarc-mobile-consent"
+    print_info "Repository: trustarc/ccm-mobile-consent-test-apps"
     print_info "API Endpoint: $repo_url"
 
     # Try with curl first, fallback to wget

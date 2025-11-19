@@ -64,13 +64,8 @@ trap cleanup EXIT
 
 # Load all required modules in order
 load_module "utils"
-load_module "platform"
 load_module "github"
 load_module "download"
-load_module "ios"
-load_module "android"
-load_module "react"
-load_module "flutter"
 load_module "menu"
 
 # Main installation flow
