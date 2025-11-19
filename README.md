@@ -10,6 +10,7 @@ A command-line installer for integrating the TrustArc Mobile Consent SDK into yo
   - Android: Gradle with version catalog support
   - React Native: Expo & Bare Metal with auto-linking
 - **Sample Implementation**: Automatic boilerplate code generation
+- **Demo App Downloads**: Pull full sample projects from the private `trustarc/ccm-mobile-consent-test-apps` repository (release branch) for reference
 - **Platform Detection**: Auto-detects your project configuration
 - **Git-Safe**: Validates git status before making changes
 
@@ -59,7 +60,7 @@ Before running the installer, make sure you have:
 - **GitHub Token**: Personal Access Token with `repo` and `read:package` scopes
   - Create one at: https://github.com/settings/tokens
   - Required scopes: `repo`, `read:package`
-  - Must have access to `trustarc/trustarc-mobile-consent` repository
+  - Must have access to `trustarc/trustarc-mobile-consent` and `trustarc/ccm-mobile-consent-test-apps`
 
 ### CocoaPods Projects (Additional Requirements)
 

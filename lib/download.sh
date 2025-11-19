@@ -3,6 +3,12 @@
 # Download and configuration functions for TrustArc CLI
 # This file contains sample app download and config update logic
 
+SAMPLE_REPO_OWNER="trustarc"
+SAMPLE_REPO_NAME="ccm-mobile-consent-test-apps"
+SAMPLE_REPO_BRANCH="release"
+SAMPLE_REPO_TREE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/tree/${SAMPLE_REPO_BRANCH}"
+SAMPLE_REPO_ARCHIVE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/heads/${SAMPLE_REPO_BRANCH}.zip"
+
 # Update configuration files in extracted sample app
 update_config_files() {
     local platform=$1
@@ -167,6 +173,13 @@ download_sample_app() {
     local platform=$1
     local domain=$2
     local website=$3
+    local token="$TRUSTARC_TOKEN"
+
+    if [ -z "$token" ]; then
+        print_error "GitHub token required to download sample applications."
+        print_info "Restart the installer and provide a token with repo access."
+        return 1
+    fi
 
     # Map platform to directory name
     local platform_type=""
@@ -190,10 +203,12 @@ download_sample_app() {
             ;;
     esac
 
-    local github_repo_url="https://github.com/trustarc-ci/trustarc-cli/archive/refs/heads/main.zip"
-    local temp_zip="trustarc-cli-temp-$$.zip"
-    local temp_dir="trustarc-cli-temp-$$"
+    local github_repo_url="$SAMPLE_REPO_TREE_URL"
+    local archive_url="$SAMPLE_REPO_ARCHIVE_URL"
+    local temp_zip="trustarc-sample-${platform_type}-$$.zip"
+    local temp_dir="trustarc-sample-${platform_type}-$$"
     local extract_dir="trustarc-sample-${platform_type}"
+    local repo_root="${SAMPLE_REPO_NAME}-${SAMPLE_REPO_BRANCH}"
 
     # Check if already extracted
     if [ -d "$extract_dir" ]; then
@@ -216,18 +231,18 @@ download_sample_app() {
     print_info "  Platform: $platform_type"
     print_info "  Domain: $domain"
     print_info "  Website: $website"
-    print_info "  Source: GitHub Repository"
+    print_info "  Source: $github_repo_url"
     echo ""
     print_info "Downloading sample application from GitHub..."
 
     # Download repo zip
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$github_repo_url" -o "$temp_zip" || {
+        curl -fsSL -H "Authorization: token $token" "$archive_url" -o "$temp_zip" || {
             print_error "Failed to download from GitHub"
             return 1
         }
     elif command -v wget >/dev/null 2>&1; then
-        wget -q "$github_repo_url" -O "$temp_zip" || {
+        wget -q --header="Authorization: token $token" "$archive_url" -O "$temp_zip" || {
             print_error "Failed to download from GitHub"
             return 1
         }
@@ -246,10 +261,10 @@ download_sample_app() {
     mkdir -p "$temp_dir"
 
     # Extract only the platforms folder we need
-    if unzip -q "$temp_zip" "trustarc-cli-main/platforms/${platform_dir}/*" -d "$temp_dir" 2>/dev/null; then
+    if unzip -q "$temp_zip" "${repo_root}/platforms/${platform_dir}/*" -d "$temp_dir" 2>/dev/null; then
         # Move the platform folder to final location
-        if [ -d "$temp_dir/trustarc-cli-main/platforms/${platform_dir}" ]; then
-            mv "$temp_dir/trustarc-cli-main/platforms/${platform_dir}" "$extract_dir"
+        if [ -d "$temp_dir/${repo_root}/platforms/${platform_dir}" ]; then
+            mv "$temp_dir/${repo_root}/platforms/${platform_dir}" "$extract_dir"
             print_success "Extracted to: $extract_dir/"
 
             # Update configuration files with user's choices

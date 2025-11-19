@@ -71,7 +71,6 @@ load_module "ios"
 load_module "android"
 load_module "react"
 load_module "flutter"
-load_module "diagnose"
 load_module "menu"
 
 # Main installation flow
