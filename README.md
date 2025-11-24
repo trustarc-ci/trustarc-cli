@@ -241,8 +241,9 @@ AI: To initialize the TrustArc SDK in Swift, call TrustArcConsentImpl.shared.ini
 
 **Simple Menu**:
 1. Chat with AI Assistant
-2. View AI status (downloads, disk usage)
-3. Back to main menu
+2. Update knowledge base (re-download latest from GitHub)
+3. View AI status (downloads, disk usage)
+4. Back to main menu
 
 ### Requirements
 

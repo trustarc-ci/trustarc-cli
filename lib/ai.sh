@@ -151,27 +151,65 @@ setup_model() {
     return 0
 }
 
-# Download pre-built knowledge base
+# Download knowledge base from GitHub
 download_knowledge_base() {
-    print_step "Downloading knowledge base..."
+    # Check if knowledge base already exists
+    if [ -f "$KNOWLEDGE_BASE" ] && [ -s "$KNOWLEDGE_BASE" ]; then
+        print_success "Knowledge base already exists (cached)"
+        return 0
+    fi
+
+    print_step "Downloading knowledge base from GitHub..."
 
     local kb_url="${REPO_BASE_URL}/lib/knowledge-base.txt"
+    local temp_kb="$KNOWLEDGE_BASE.tmp"
 
     # Download knowledge base
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$kb_url" -o "$KNOWLEDGE_BASE" 2>/dev/null
+        if curl -fsSL "$kb_url" -o "$temp_kb" 2>/dev/null; then
+            mv "$temp_kb" "$KNOWLEDGE_BASE"
+        else
+            rm -f "$temp_kb"
+            print_error "Failed to download from GitHub"
+            return 1
+        fi
     elif command -v wget >/dev/null 2>&1; then
-        wget -q "$kb_url" -O "$KNOWLEDGE_BASE" 2>/dev/null
+        if wget -q "$kb_url" -O "$temp_kb" 2>/dev/null; then
+            mv "$temp_kb" "$KNOWLEDGE_BASE"
+        else
+            rm -f "$temp_kb"
+            print_error "Failed to download from GitHub"
+            return 1
+        fi
     else
         print_error "Neither curl nor wget is available"
         return 1
     fi
 
     if [ -f "$KNOWLEDGE_BASE" ] && [ -s "$KNOWLEDGE_BASE" ]; then
-        print_success "Knowledge base downloaded successfully"
+        local kb_size=$(du -h "$KNOWLEDGE_BASE" | cut -f1)
+        print_success "Knowledge base downloaded and cached ($kb_size)"
+        print_substep "Saved to: $KNOWLEDGE_BASE"
         return 0
     else
-        print_error "Failed to download knowledge base"
+        print_error "Failed to setup knowledge base"
+        return 1
+    fi
+}
+
+# Update knowledge base (re-download from GitHub)
+update_knowledge_base() {
+    print_step "Updating knowledge base from GitHub..."
+
+    # Remove existing knowledge base
+    rm -f "$KNOWLEDGE_BASE"
+
+    # Download fresh copy
+    if download_knowledge_base; then
+        print_success "Knowledge base updated successfully"
+        return 0
+    else
+        print_error "Failed to update knowledge base"
         return 1
     fi
 }
@@ -323,21 +361,28 @@ show_ai_menu() {
         print_substep "Trained on iOS, Android, React Native, and Flutter examples"
         echo ""
         print_menu_option "1" "Chat with AI Assistant"
-        print_menu_option "2" "View AI status"
-        print_menu_option "3" "Back to main menu"
+        print_menu_option "2" "Update knowledge base"
+        print_menu_option "3" "View AI status"
+        print_menu_option "4" "Back to main menu"
         echo ""
-        read -p $'\033[0;34mEnter your choice (1-3): \033[0m' ai_choice
+        read -p $'\033[0;34mEnter your choice (1-4): \033[0m' ai_choice
 
         case "$ai_choice" in
             1)
                 ai_chat
                 ;;
             2)
-                show_ai_status
+                echo ""
+                update_knowledge_base
                 echo ""
                 read -p "Press enter to continue..."
                 ;;
             3)
+                show_ai_status
+                echo ""
+                read -p "Press enter to continue..."
+                ;;
+            4)
                 return 0
                 ;;
             *)
