@@ -13,9 +13,9 @@ PROJECT_CONTEXT="$AI_DIR/project-context.txt"
 PROJECT_SCAN_ENABLED="$AI_DIR/.scan-enabled"
 REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main"
 
-# Model configuration (DeepSeek-Coder 1.3B Q4 quantized ~700MB)
-MODEL_NAME="deepseek-coder-1.3b-instruct.Q4_K_M.gguf"
-MODEL_URL="https://huggingface.co/TheBloke/deepseek-coder-1.3b-instruct-GGUF/resolve/main/deepseek-coder-1.3b-instruct.Q4_K_M.gguf"
+# Model configuration (Llama 3.2 1B Instruct Q4 quantized ~700MB)
+MODEL_NAME="Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+MODEL_URL="https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
 
 # llama.cpp binary URLs
 LLAMACPP_VERSION="b4216"
@@ -240,61 +240,64 @@ scan_project() {
     # Find and scan Swift files (iOS)
     if find "$scan_dir" -name "*.swift" -type f 2>/dev/null | head -1 | grep -q .; then
         echo "=== Swift Files (iOS) ===" >> "$PROJECT_CONTEXT"
-        find "$scan_dir" -name "*.swift" -type f 2>/dev/null | while read -r file; do
+        while IFS= read -r file; do
             # Skip Pods and build directories
             if ! echo "$file" | grep -q -E "Pods/|Build/|DerivedData/"; then
                 echo "File: $file" >> "$PROJECT_CONTEXT"
                 head -100 "$file" >> "$PROJECT_CONTEXT" 2>/dev/null
                 echo "" >> "$PROJECT_CONTEXT"
-                ((file_count++))
+                file_count=$((file_count + 1))
             fi
-        done
-        print_substep "Found Swift files"
+        done < <(find "$scan_dir" -name "*.swift" -type f 2>/dev/null)
+        print_substep "Found Swift files ($file_count)"
     fi
 
     # Find and scan Kotlin files (Android)
     if find "$scan_dir" -name "*.kt" -type f 2>/dev/null | head -1 | grep -q .; then
         echo "=== Kotlin Files (Android) ===" >> "$PROJECT_CONTEXT"
-        find "$scan_dir" -name "*.kt" -type f 2>/dev/null | while read -r file; do
+        local kt_count=0
+        while IFS= read -r file; do
             # Skip build directories
             if ! echo "$file" | grep -q -E "build/|.gradle/"; then
                 echo "File: $file" >> "$PROJECT_CONTEXT"
                 head -100 "$file" >> "$PROJECT_CONTEXT" 2>/dev/null
                 echo "" >> "$PROJECT_CONTEXT"
-                ((file_count++))
+                kt_count=$((kt_count + 1))
             fi
-        done
-        print_substep "Found Kotlin files"
+        done < <(find "$scan_dir" -name "*.kt" -type f 2>/dev/null)
+        print_substep "Found Kotlin files ($kt_count)"
     fi
 
     # Find and scan TypeScript/JavaScript files (React Native)
-    if find "$scan_dir" -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" -type f 2>/dev/null | head -1 | grep -q .; then
+    if find "$scan_dir" \( -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" \) -type f 2>/dev/null | head -1 | grep -q .; then
         echo "=== TypeScript/JavaScript Files (React Native) ===" >> "$PROJECT_CONTEXT"
-        find "$scan_dir" \( -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" \) -type f 2>/dev/null | while read -r file; do
+        local js_count=0
+        while IFS= read -r file; do
             # Skip node_modules and build directories
             if ! echo "$file" | grep -q -E "node_modules/|build/|dist/|.expo/"; then
                 echo "File: $file" >> "$PROJECT_CONTEXT"
                 head -100 "$file" >> "$PROJECT_CONTEXT" 2>/dev/null
                 echo "" >> "$PROJECT_CONTEXT"
-                ((file_count++))
+                js_count=$((js_count + 1))
             fi
-        done
-        print_substep "Found TypeScript/JavaScript files"
+        done < <(find "$scan_dir" \( -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" \) -type f 2>/dev/null)
+        print_substep "Found TypeScript/JavaScript files ($js_count)"
     fi
 
     # Find and scan Dart files (Flutter)
     if find "$scan_dir" -name "*.dart" -type f 2>/dev/null | head -1 | grep -q .; then
         echo "=== Dart Files (Flutter) ===" >> "$PROJECT_CONTEXT"
-        find "$scan_dir" -name "*.dart" -type f 2>/dev/null | while read -r file; do
+        local dart_count=0
+        while IFS= read -r file; do
             # Skip build and generated directories
             if ! echo "$file" | grep -q -E "build/|.dart_tool/|generated/"; then
                 echo "File: $file" >> "$PROJECT_CONTEXT"
                 head -100 "$file" >> "$PROJECT_CONTEXT" 2>/dev/null
                 echo "" >> "$PROJECT_CONTEXT"
-                ((file_count++))
+                dart_count=$((dart_count + 1))
             fi
-        done
-        print_substep "Found Dart files"
+        done < <(find "$scan_dir" -name "*.dart" -type f 2>/dev/null)
+        print_substep "Found Dart files ($dart_count)"
     fi
 
     echo "=== End of Project Context ===" >> "$PROJECT_CONTEXT"
@@ -351,79 +354,54 @@ run_inference() {
     local model_path="$MODEL_DIR/$MODEL_NAME"
     local llamacpp="$BIN_DIR/llama-cli"
 
-    # Build system prompt with better instructions
-    local system_prompt="You are a TrustArc SDK assistant. Answer questions using ONLY the documentation provided.
+    # Build prompt using Llama 3 chat format
+    local system_msg="You are a helpful TrustArc SDK assistant. Answer questions concisely (2-3 sentences max).
 
-STRICT RULES:
-1. Keep answers to 3 sentences maximum
-2. Use ONLY information from the provided documentation
-3. ONLY these 3 functions exist: initialize(), openCm(), getConsentData()
-4. Do NOT make up code, errors, or features
-5. If you cannot answer from the docs, say: 'I don't have that information'
-
-Function syntax (DO NOT DEVIATE):
-- iOS Swift: TrustArcConsentImpl.shared.initialize()
-- Android Kotlin: TrustArcConsentImpl.initialize(this)
-- React Native: TrustArcConsentImpl.initialize()
-- Flutter Dart: TrustArcConsentImpl.initialize()"
-
-    # Build the full prompt with context first
-    local full_prompt="<|system|>
-${system_prompt}"
+The TrustArc SDK has 3 main functions:
+- initialize() - Setup the SDK
+- openCm() - Show consent dialog
+- getConsentData() - Get consent data"
 
     # Add documentation context
     if [ -n "$context" ]; then
-        full_prompt="${full_prompt}
+        local limited_context=$(echo "$context" | head -20)
+        system_msg="${system_msg}
 
-Documentation to use for answering:
-${context}
-"
+Reference Documentation:
+${limited_context}"
     fi
 
     # Add project context if enabled
     if is_project_scan_enabled; then
-        local project_ctx=$(head -500 "$PROJECT_CONTEXT" 2>/dev/null)
+        local project_ctx=$(head -30 "$PROJECT_CONTEXT" 2>/dev/null)
         if [ -n "$project_ctx" ]; then
-            full_prompt="${full_prompt}
+            system_msg="${system_msg}
 
-User's Project Code (use this to provide specific answers):
-${project_ctx}
-"
+User's Project Code:
+${project_ctx}"
         fi
     fi
 
-    # Fallback message if no context
-    if [ -z "$context" ] && ! is_project_scan_enabled; then
-        full_prompt="${full_prompt}
+    # Build Llama 3 format prompt
+    local full_prompt="<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 
-No specific documentation or project context available. Provide a brief general answer.
-"
-    fi
+${system_msg}<|eot_id|><|start_header_id|>user<|end_header_id|>
 
-    # Add user question
-    full_prompt="${full_prompt}<|user|>
-${prompt}
+${prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 
-Answer in 3 sentences max. Include a code example if relevant.
-<|assistant|>
 "
 
-    # Run llama.cpp with parameters optimized for concise, accurate responses
+    # Run llama.cpp directly (output goes straight to terminal)
+    # Redirect stderr to /dev/null to hide all debug output
     "$llamacpp" \
         -m "$model_path" \
         -p "$full_prompt" \
-        -n 150 \
+        -n 512 \
         -c 1024 \
-        --temp 0.1 \
-        --top-p 0.5 \
-        --top-k 20 \
-        --repeat-penalty 1.3 \
-        --frequency-penalty 0.2 \
-        --presence-penalty 0.2 \
-        --stop "<|user|>" \
-        --stop "<|system|>" \
-        --stop "Q:" \
-        --stop "Question:" \
+        --temp 0.6 \
+        --top-p 0.9 \
+        --top-k 40 \
+        --repeat-penalty 1.1 \
         -t 4 \
         --no-display-prompt \
         2>/dev/null

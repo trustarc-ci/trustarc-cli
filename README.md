@@ -217,7 +217,7 @@ When you first select "AI Assistant" from the main menu:
 
 1. The CLI will ask to download required components (~700MB one-time download):
    - llama.cpp inference engine (~10MB)
-   - DeepSeek-Coder 1.3B model (~700MB)
+   - Llama 3.2 1B Instruct model (~700MB)
    - Pre-built knowledge base trained on TrustArc SDK documentation
 2. Files are stored in `~/.trustarc-cli/ai/` for reuse
 3. Setup is automatic - just confirm the download
