@@ -151,35 +151,41 @@ setup_model() {
     return 0
 }
 
-# Download knowledge base from GitHub
+# Download knowledge base from GitHub (always downloads latest)
 download_knowledge_base() {
-    # Check if knowledge base already exists
-    if [ -f "$KNOWLEDGE_BASE" ] && [ -s "$KNOWLEDGE_BASE" ]; then
-        print_success "Knowledge base already exists (cached)"
-        return 0
-    fi
-
-    print_step "Downloading knowledge base from GitHub..."
+    print_step "Syncing knowledge base from GitHub..."
 
     local kb_url="${REPO_BASE_URL}/lib/knowledge-base.txt"
     local temp_kb="$KNOWLEDGE_BASE.tmp"
 
-    # Download knowledge base
+    # Download knowledge base (always get latest version)
     if command -v curl >/dev/null 2>&1; then
         if curl -fsSL "$kb_url" -o "$temp_kb" 2>/dev/null; then
             mv "$temp_kb" "$KNOWLEDGE_BASE"
         else
             rm -f "$temp_kb"
-            print_error "Failed to download from GitHub"
-            return 1
+            # If download fails but cached version exists, use it
+            if [ -f "$KNOWLEDGE_BASE" ] && [ -s "$KNOWLEDGE_BASE" ]; then
+                print_warning "Failed to download latest, using cached version"
+                return 0
+            else
+                print_error "Failed to download from GitHub"
+                return 1
+            fi
         fi
     elif command -v wget >/dev/null 2>&1; then
         if wget -q "$kb_url" -O "$temp_kb" 2>/dev/null; then
             mv "$temp_kb" "$KNOWLEDGE_BASE"
         else
             rm -f "$temp_kb"
-            print_error "Failed to download from GitHub"
-            return 1
+            # If download fails but cached version exists, use it
+            if [ -f "$KNOWLEDGE_BASE" ] && [ -s "$KNOWLEDGE_BASE" ]; then
+                print_warning "Failed to download latest, using cached version"
+                return 0
+            else
+                print_error "Failed to download from GitHub"
+                return 1
+            fi
         fi
     else
         print_error "Neither curl nor wget is available"
@@ -188,8 +194,7 @@ download_knowledge_base() {
 
     if [ -f "$KNOWLEDGE_BASE" ] && [ -s "$KNOWLEDGE_BASE" ]; then
         local kb_size=$(du -h "$KNOWLEDGE_BASE" | cut -f1)
-        print_success "Knowledge base downloaded and cached ($kb_size)"
-        print_substep "Saved to: $KNOWLEDGE_BASE"
+        print_success "Knowledge base synced ($kb_size)"
         return 0
     else
         print_error "Failed to setup knowledge base"
@@ -222,12 +227,26 @@ run_inference() {
     local model_path="$MODEL_DIR/$MODEL_NAME"
     local llamacpp="$BIN_DIR/llama-cli"
 
-    # Build system prompt
-    local system_prompt="You are an AI assistant specialized in TrustArc Mobile Consent SDK integration. You help developers integrate the SDK into iOS, Android, React Native, and Flutter applications. Be concise and provide code examples when relevant."
+    # Build system prompt with better instructions
+    local system_prompt="You are a helpful SDK integration assistant for TrustArc Mobile Consent SDK.
+
+RULES:
+- Give SHORT, DIRECT answers (2-4 sentences max)
+- Always include code examples when explaining how to do something
+- Use the actual function names from TrustArc SDK: initialize(), openCm(), getConsentData()
+- If asked about a specific platform (iOS/Android/React Native/Flutter), answer ONLY for that platform
+- Do not make up features that don't exist in the SDK
+- If you don't know, say 'I don't have that information in my knowledge base'
+
+Platform-specific syntax:
+- iOS: TrustArcConsentImpl.shared.initialize()
+- Android: TrustArcConsentImpl.initialize(this)
+- React Native: TrustArcConsentImpl.initialize()
+- Flutter: TrustArcConsentImpl.initialize()"
 
     # Add context if available
     if [ -n "$context" ]; then
-        system_prompt="$system_prompt\n\nContext from documentation:\n$context"
+        system_prompt="$system_prompt\n\nRelevant documentation:\n$context"
     fi
 
     # Run inference
@@ -237,15 +256,18 @@ ${system_prompt}
 ${prompt}
 <|assistant|>"
 
-    # Run llama.cpp with parameters optimized for speed
+    # Run llama.cpp with parameters optimized for concise responses
     "$llamacpp" \
         -m "$model_path" \
         -p "$full_prompt" \
-        -n 512 \
+        -n 256 \
         -c 2048 \
-        --temp 0.7 \
+        --temp 0.3 \
         --top-p 0.9 \
-        --repeat-penalty 1.1 \
+        --top-k 40 \
+        --repeat-penalty 1.15 \
+        --stop "<|user|>" \
+        --stop "<|system|>" \
         -t 4 \
         --no-display-prompt \
         2>/dev/null
@@ -350,6 +372,13 @@ show_ai_menu() {
             print_info "Returning to main menu..."
             return 0
         fi
+    else
+        # AI is already installed, sync knowledge base
+        echo ""
+        if ! download_knowledge_base; then
+            print_warning "Could not sync knowledge base. AI may have limited context."
+        fi
+        echo ""
     fi
 
     # AI submenu
@@ -358,31 +387,24 @@ show_ai_menu() {
         print_header "AI Assistant"
         echo ""
         print_info "Ask questions about TrustArc SDK integration"
-        print_substep "Trained on iOS, Android, React Native, and Flutter examples"
+        print_substep "Knowledge base auto-syncs from GitHub on each load"
         echo ""
         print_menu_option "1" "Chat with AI Assistant"
-        print_menu_option "2" "Update knowledge base"
-        print_menu_option "3" "View AI status"
-        print_menu_option "4" "Back to main menu"
+        print_menu_option "2" "View AI status"
+        print_menu_option "3" "Back to main menu"
         echo ""
-        read -p $'\033[0;34mEnter your choice (1-4): \033[0m' ai_choice
+        read -p $'\033[0;34mEnter your choice (1-3): \033[0m' ai_choice
 
         case "$ai_choice" in
             1)
                 ai_chat
                 ;;
             2)
-                echo ""
-                update_knowledge_base
-                echo ""
-                read -p "Press enter to continue..."
-                ;;
-            3)
                 show_ai_status
                 echo ""
                 read -p "Press enter to continue..."
                 ;;
-            4)
+            3)
                 return 0
                 ;;
             *)

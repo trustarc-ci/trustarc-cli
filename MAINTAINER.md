@@ -193,10 +193,11 @@ git commit -m "Update AI knowledge base with new documentation"
 git push origin main
 ```
 
-**Important:** After you push, users can update their local copy by selecting "Update knowledge base" from the AI menu. The knowledge base is:
-- Downloaded from GitHub on first AI setup
-- Cached locally at `~/.trustarc-cli/ai/knowledge.txt`
-- Can be refreshed anytime via the "Update knowledge base" menu option
+**Important:** After you push, users will automatically get the updates. The knowledge base:
+- Auto-syncs from GitHub every time users access the AI Assistant
+- Is cached locally at `~/.trustarc-cli/ai/knowledge.txt`
+- Falls back to cached version if GitHub is unreachable
+- Updates are transparent and instant (only 7.2KB)
 
 ## What Gets Distributed
 
