@@ -17,10 +17,11 @@ show_main_menu() {
     printf "${BLUE}What would you like to do?${NC}\n\n"
     print_menu_option "1" "Integrate SDK into project"
     print_menu_option "2" "Download sample application"
-    print_menu_option "3" "Clean up (remove token and config)"
-    print_menu_option "4" "Exit"
+    print_menu_option "3" "AI Assistant (beta)"
+    print_menu_option "4" "Clean up (remove token and config)"
+    print_menu_option "5" "Exit"
     echo ""
-    read -p $'\033[0;34mEnter your choice (1-4): \033[0m' main_choice
+    read -p $'\033[0;34mEnter your choice (1-5): \033[0m' main_choice
 
     case "$main_choice" in
         1)
@@ -30,12 +31,17 @@ show_main_menu() {
             download_sample_menu
             ;;
         3)
-            cleanup_trustarc
+            show_ai_menu
+            echo ""
+            show_main_menu
             ;;
         4)
+            cleanup_trustarc
+            ;;
+        5)
             echo ""
             print_info "Configuration saved to: $CONFIG_FILE"
-            print_substep "Run option 3 to clean up when you no longer need it"
+            print_substep "Run option 4 to clean up when you no longer need it"
             echo ""
             exit 0
             ;;
@@ -54,6 +60,7 @@ cleanup_trustarc() {
     echo ""
     print_substep "TRUSTARC_TOKEN from your shell configuration"
     print_substep "Configuration file: $CONFIG_FILE"
+    print_substep "AI Assistant files and models (~/.trustarc-cli/ai/)"
     echo ""
     print_warning "This action cannot be undone"
     echo ""
@@ -132,6 +139,21 @@ cleanup_trustarc() {
         fi
     else
         print_info "No configuration file found at: $config_path"
+    fi
+
+    # Remove AI assistant files
+    echo ""
+    print_step "Removing AI Assistant files..."
+    local ai_dir="$HOME/.trustarc-cli/ai"
+    if [ -d "$ai_dir" ]; then
+        rm -rf "$ai_dir"
+        if [ -d "$ai_dir" ]; then
+            print_error "Failed to remove AI directory: $ai_dir"
+        else
+            print_success "AI Assistant files removed: $ai_dir"
+        fi
+    else
+        print_info "No AI files found at: $ai_dir"
     fi
 
     echo ""

@@ -11,6 +11,11 @@ A command-line installer for integrating the TrustArc Mobile Consent SDK into yo
   - React Native: Expo & Bare Metal with auto-linking
 - **Sample Implementation**: Automatic boilerplate code generation
 - **Demo App Downloads**: Pull full sample projects from the private `trustarc/ccm-mobile-consent-test-apps` repository (release branch) for reference
+- **AI Assistant (Beta)**: Local AI-powered help for SDK integration
+  - Runs completely offline after initial setup
+  - Trained on TrustArc SDK documentation and implementation examples
+  - PDF documentation indexing support
+  - No data sent to external APIs
 - **Platform Detection**: Auto-detects your project configuration
 - **Git-Safe**: Validates git status before making changes
 
@@ -202,6 +207,69 @@ const consents = await TrustArcConsentImpl.getConsentData();
 6. Follow the guided integration process
 7. Optionally generate implementation boilerplate
 
+## AI Assistant (Beta)
+
+The CLI includes a local AI assistant to help with SDK integration questions. It runs completely offline after initial setup and doesn't send any data to external APIs.
+
+### First-Time Setup
+
+When you first select "AI Assistant" from the main menu:
+
+1. The CLI will ask to download required components (~700MB one-time download):
+   - llama.cpp inference engine (~10MB)
+   - DeepSeek-Coder 1.3B model (~700MB)
+   - Pre-built knowledge base trained on TrustArc SDK documentation
+2. Files are stored in `~/.trustarc-cli/ai/` for reuse
+3. Setup is automatic - just confirm the download
+
+### Features
+
+**Chat Mode**: Ask questions about SDK integration
+```
+You: How do I initialize the SDK in Swift?
+AI: To initialize the TrustArc SDK in Swift, call TrustArcConsentImpl.shared.initialize()
+    in your AppDelegate's didFinishLaunchingWithOptions method...
+```
+
+**Pre-Trained Knowledge Base**: Includes
+- iOS Swift implementation examples
+- Android Kotlin implementation examples
+- React Native TypeScript implementation
+- Flutter Dart implementation
+- Common troubleshooting and FAQ
+- Platform-specific integration guides
+
+**Simple Menu**:
+1. Chat with AI Assistant
+2. View AI status (downloads, disk usage)
+3. Back to main menu
+
+### Requirements
+
+- **macOS**: Apple Silicon (arm64) or Intel (x64)
+- **Linux**: x64 architecture
+- **Disk Space**: ~1GB for AI files
+
+### Performance
+
+- First response: ~2-5 seconds (model loading)
+- Subsequent responses: ~1-3 seconds
+- Runs on CPU (no GPU required)
+
+### Privacy
+
+- Everything runs locally on your machine
+- No data is sent to external servers
+- Knowledge base stays on your computer
+- Safe for proprietary projects
+
+### Limitations
+
+- Responses may not be 100% accurate (beta feature)
+- Best for general SDK questions and code examples
+- For complex issues, consult official documentation
+- Knowledge base is maintained by TrustArc and cannot be customized by end users
+
 ## Configuration
 
 The CLI stores configuration in two places:
@@ -236,6 +304,7 @@ To remove all CLI configuration and tokens:
 This will:
 - Remove `TRUSTARC_TOKEN` from your shell configuration
 - Delete `~/.trustarc-cli-config`
+- Remove AI Assistant files and models (`~/.trustarc-cli/ai/`)
 - Create a backup of your shell config
 
 ## Troubleshooting

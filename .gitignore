@@ -259,3 +259,10 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
+
+# AI Training (maintainer only - don't commit source materials)
+training/
+!training/.gitkeep
+
+# But DO commit the generated knowledge base
+!lib/knowledge-base.txt
