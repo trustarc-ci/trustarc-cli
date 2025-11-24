@@ -241,10 +241,20 @@ AI: To initialize the TrustArc SDK in Swift, call TrustArcConsentImpl.shared.ini
 
 **Simple Menu**:
 1. Chat with AI Assistant
-2. View AI status (downloads, disk usage)
-3. Back to main menu
+2. Scan project (enables context-aware answers)
+3. Clear project scan
+4. View AI status (downloads, disk usage, project scan)
+5. Back to main menu
 
 **Auto-Sync**: The knowledge base automatically syncs from GitHub each time you load the AI Assistant, ensuring you always have the latest documentation and examples.
+
+**Project Scanning**: Enable project scanning to let the AI analyze your actual code and provide context-aware answers specific to your implementation. The AI scans:
+- Swift files (iOS)
+- Kotlin files (Android)
+- TypeScript/JavaScript files (React Native)
+- Dart files (Flutter)
+
+When enabled, the AI can answer questions like "How is TrustArc integrated in my project?" or "What's wrong with my implementation?"
 
 ### Requirements
 
@@ -265,12 +275,44 @@ AI: To initialize the TrustArc SDK in Swift, call TrustArcConsentImpl.shared.ini
 - Knowledge base stays on your computer
 - Safe for proprietary projects
 
+### Using Project Scanning
+
+**Enable scanning:**
+1. Select "AI Assistant" from main menu
+2. Choose "2) Scan project"
+3. Enter your project directory (or press Enter for current directory)
+4. AI will scan and index your code files
+
+**Benefits:**
+- Get answers specific to YOUR code
+- AI can review your TrustArc integration
+- Context-aware debugging help
+- Personalized code suggestions
+
+**Example with project scanning:**
+```
+You: How is TrustArc integrated in my project?
+AI: Based on your AppDelegate.swift, you're initializing TrustArc in
+    didFinishLaunchingWithOptions. Your implementation looks correct.
+
+You: What's wrong with my implementation?
+AI: I see in MainActivity.kt you're calling openCm() before initialize().
+    Move the initialize() call earlier in onCreate().
+```
+
+**Privacy:**
+- All scanning happens locally
+- No data sent to external servers
+- Scan data stored in `~/.trustarc-cli/ai/project-context.txt`
+- Clear anytime with "3) Clear project scan"
+
 ### Limitations
 
 - Responses may not be 100% accurate (beta feature)
 - Best for general SDK questions and code examples
 - For complex issues, consult official documentation
 - Knowledge base is maintained by TrustArc and cannot be customized by end users
+- Project scanning limited to first 100 lines per file
 
 ## Configuration
 

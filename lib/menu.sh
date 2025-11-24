@@ -151,6 +151,7 @@ cleanup_trustarc() {
             print_error "Failed to remove AI directory: $ai_dir"
         else
             print_success "AI Assistant files removed: $ai_dir"
+            print_substep "Includes: models, knowledge base, and project scans"
         fi
     else
         print_info "No AI files found at: $ai_dir"

@@ -9,6 +9,8 @@ MODEL_DIR="$AI_DIR/models"
 BIN_DIR="$AI_DIR/bin"
 DOCS_DIR="$AI_DIR/docs"
 KNOWLEDGE_BASE="$AI_DIR/knowledge.txt"
+PROJECT_CONTEXT="$AI_DIR/project-context.txt"
+PROJECT_SCAN_ENABLED="$AI_DIR/.scan-enabled"
 REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main"
 
 # Model configuration (DeepSeek-Coder 1.3B Q4 quantized ~700MB)
@@ -219,6 +221,128 @@ update_knowledge_base() {
     fi
 }
 
+# Scan project for context
+scan_project() {
+    local scan_dir=${1:-.}
+
+    print_step "Scanning project for context..."
+
+    # Clear existing project context
+    > "$PROJECT_CONTEXT"
+
+    echo "=== Project Context ===" >> "$PROJECT_CONTEXT"
+    echo "Scanned from: $scan_dir" >> "$PROJECT_CONTEXT"
+    echo "Scanned at: $(date)" >> "$PROJECT_CONTEXT"
+    echo "" >> "$PROJECT_CONTEXT"
+
+    local file_count=0
+
+    # Find and scan Swift files (iOS)
+    if find "$scan_dir" -name "*.swift" -type f 2>/dev/null | head -1 | grep -q .; then
+        echo "=== Swift Files (iOS) ===" >> "$PROJECT_CONTEXT"
+        find "$scan_dir" -name "*.swift" -type f 2>/dev/null | while read -r file; do
+            # Skip Pods and build directories
+            if ! echo "$file" | grep -q -E "Pods/|Build/|DerivedData/"; then
+                echo "File: $file" >> "$PROJECT_CONTEXT"
+                head -100 "$file" >> "$PROJECT_CONTEXT" 2>/dev/null
+                echo "" >> "$PROJECT_CONTEXT"
+                ((file_count++))
+            fi
+        done
+        print_substep "Found Swift files"
+    fi
+
+    # Find and scan Kotlin files (Android)
+    if find "$scan_dir" -name "*.kt" -type f 2>/dev/null | head -1 | grep -q .; then
+        echo "=== Kotlin Files (Android) ===" >> "$PROJECT_CONTEXT"
+        find "$scan_dir" -name "*.kt" -type f 2>/dev/null | while read -r file; do
+            # Skip build directories
+            if ! echo "$file" | grep -q -E "build/|.gradle/"; then
+                echo "File: $file" >> "$PROJECT_CONTEXT"
+                head -100 "$file" >> "$PROJECT_CONTEXT" 2>/dev/null
+                echo "" >> "$PROJECT_CONTEXT"
+                ((file_count++))
+            fi
+        done
+        print_substep "Found Kotlin files"
+    fi
+
+    # Find and scan TypeScript/JavaScript files (React Native)
+    if find "$scan_dir" -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" -type f 2>/dev/null | head -1 | grep -q .; then
+        echo "=== TypeScript/JavaScript Files (React Native) ===" >> "$PROJECT_CONTEXT"
+        find "$scan_dir" \( -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" \) -type f 2>/dev/null | while read -r file; do
+            # Skip node_modules and build directories
+            if ! echo "$file" | grep -q -E "node_modules/|build/|dist/|.expo/"; then
+                echo "File: $file" >> "$PROJECT_CONTEXT"
+                head -100 "$file" >> "$PROJECT_CONTEXT" 2>/dev/null
+                echo "" >> "$PROJECT_CONTEXT"
+                ((file_count++))
+            fi
+        done
+        print_substep "Found TypeScript/JavaScript files"
+    fi
+
+    # Find and scan Dart files (Flutter)
+    if find "$scan_dir" -name "*.dart" -type f 2>/dev/null | head -1 | grep -q .; then
+        echo "=== Dart Files (Flutter) ===" >> "$PROJECT_CONTEXT"
+        find "$scan_dir" -name "*.dart" -type f 2>/dev/null | while read -r file; do
+            # Skip build and generated directories
+            if ! echo "$file" | grep -q -E "build/|.dart_tool/|generated/"; then
+                echo "File: $file" >> "$PROJECT_CONTEXT"
+                head -100 "$file" >> "$PROJECT_CONTEXT" 2>/dev/null
+                echo "" >> "$PROJECT_CONTEXT"
+                ((file_count++))
+            fi
+        done
+        print_substep "Found Dart files"
+    fi
+
+    echo "=== End of Project Context ===" >> "$PROJECT_CONTEXT"
+
+    if [ -s "$PROJECT_CONTEXT" ]; then
+        local context_size=$(du -h "$PROJECT_CONTEXT" | cut -f1)
+        print_success "Project scanned successfully ($context_size)"
+        print_substep "Context saved to: $PROJECT_CONTEXT"
+        # Enable project scanning
+        touch "$PROJECT_SCAN_ENABLED"
+        return 0
+    else
+        print_warning "No relevant project files found"
+        return 1
+    fi
+}
+
+# Check if project scanning is enabled
+is_project_scan_enabled() {
+    [ -f "$PROJECT_SCAN_ENABLED" ] && [ -f "$PROJECT_CONTEXT" ]
+}
+
+# Enable project scanning
+enable_project_scan() {
+    local scan_dir
+    echo ""
+    read -p "Enter project directory to scan (default: current directory): " scan_dir
+    scan_dir=${scan_dir:-.}
+
+    # Expand ~ to home directory
+    scan_dir="${scan_dir/#\~/$HOME}"
+
+    if [ ! -d "$scan_dir" ]; then
+        print_error "Directory not found: $scan_dir"
+        return 1
+    fi
+
+    echo ""
+    scan_project "$scan_dir"
+}
+
+# Disable project scanning
+disable_project_scan() {
+    rm -f "$PROJECT_SCAN_ENABLED"
+    rm -f "$PROJECT_CONTEXT"
+    print_success "Project scanning disabled"
+}
+
 
 # Run AI inference
 run_inference() {
@@ -228,46 +352,78 @@ run_inference() {
     local llamacpp="$BIN_DIR/llama-cli"
 
     # Build system prompt with better instructions
-    local system_prompt="You are a helpful SDK integration assistant for TrustArc Mobile Consent SDK.
+    local system_prompt="You are a TrustArc SDK assistant. Answer questions using ONLY the documentation provided.
 
-RULES:
-- Give SHORT, DIRECT answers (2-4 sentences max)
-- Always include code examples when explaining how to do something
-- Use the actual function names from TrustArc SDK: initialize(), openCm(), getConsentData()
-- If asked about a specific platform (iOS/Android/React Native/Flutter), answer ONLY for that platform
-- Do not make up features that don't exist in the SDK
-- If you don't know, say 'I don't have that information in my knowledge base'
+STRICT RULES:
+1. Keep answers to 3 sentences maximum
+2. Use ONLY information from the provided documentation
+3. ONLY these 3 functions exist: initialize(), openCm(), getConsentData()
+4. Do NOT make up code, errors, or features
+5. If you cannot answer from the docs, say: 'I don't have that information'
 
-Platform-specific syntax:
-- iOS: TrustArcConsentImpl.shared.initialize()
-- Android: TrustArcConsentImpl.initialize(this)
+Function syntax (DO NOT DEVIATE):
+- iOS Swift: TrustArcConsentImpl.shared.initialize()
+- Android Kotlin: TrustArcConsentImpl.initialize(this)
 - React Native: TrustArcConsentImpl.initialize()
-- Flutter: TrustArcConsentImpl.initialize()"
+- Flutter Dart: TrustArcConsentImpl.initialize()"
 
-    # Add context if available
+    # Build the full prompt with context first
+    local full_prompt="<|system|>
+${system_prompt}"
+
+    # Add documentation context
     if [ -n "$context" ]; then
-        system_prompt="$system_prompt\n\nRelevant documentation:\n$context"
+        full_prompt="${full_prompt}
+
+Documentation to use for answering:
+${context}
+"
     fi
 
-    # Run inference
-    local full_prompt="<|system|>
-${system_prompt}
-<|user|>
-${prompt}
-<|assistant|>"
+    # Add project context if enabled
+    if is_project_scan_enabled; then
+        local project_ctx=$(head -500 "$PROJECT_CONTEXT" 2>/dev/null)
+        if [ -n "$project_ctx" ]; then
+            full_prompt="${full_prompt}
 
-    # Run llama.cpp with parameters optimized for concise responses
+User's Project Code (use this to provide specific answers):
+${project_ctx}
+"
+        fi
+    fi
+
+    # Fallback message if no context
+    if [ -z "$context" ] && ! is_project_scan_enabled; then
+        full_prompt="${full_prompt}
+
+No specific documentation or project context available. Provide a brief general answer.
+"
+    fi
+
+    # Add user question
+    full_prompt="${full_prompt}<|user|>
+${prompt}
+
+Answer in 3 sentences max. Include a code example if relevant.
+<|assistant|>
+"
+
+    # Run llama.cpp with parameters optimized for concise, accurate responses
     "$llamacpp" \
         -m "$model_path" \
         -p "$full_prompt" \
-        -n 256 \
-        -c 2048 \
-        --temp 0.3 \
-        --top-p 0.9 \
-        --top-k 40 \
-        --repeat-penalty 1.15 \
+        -n 150 \
+        -c 1024 \
+        --temp 0.1 \
+        --top-p 0.5 \
+        --top-k 20 \
+        --repeat-penalty 1.3 \
+        --frequency-penalty 0.2 \
+        --presence-penalty 0.2 \
         --stop "<|user|>" \
         --stop "<|system|>" \
+        --stop "Q:" \
+        --stop "Question:" \
         -t 4 \
         --no-display-prompt \
         2>/dev/null
@@ -276,17 +432,39 @@ ${prompt}
 # Search knowledge base for relevant context
 search_knowledge_base() {
     local query=$1
-    local max_lines=100
+    local max_lines=50
 
     if [ ! -f "$KNOWLEDGE_BASE" ]; then
         echo ""
         return
     fi
 
-    # Simple keyword-based search (grep for query terms)
-    local results=$(grep -i -C 5 "$query" "$KNOWLEDGE_BASE" 2>/dev/null | head -n $max_lines)
+    # Convert query to lowercase and search for platform-specific sections
+    local query_lower=$(echo "$query" | tr '[:upper:]' '[:lower:]')
+    local context=""
 
-    echo "$results"
+    # Search for platform-specific sections
+    if echo "$query_lower" | grep -q -E "ios|swift|xcode|cocoapods|spm"; then
+        context=$(sed -n '/=== iOS Integration/,/^===/p' "$KNOWLEDGE_BASE" 2>/dev/null)
+    elif echo "$query_lower" | grep -q -E "android|kotlin|gradle"; then
+        context=$(sed -n '/=== Android Integration/,/^===/p' "$KNOWLEDGE_BASE" 2>/dev/null)
+    elif echo "$query_lower" | grep -q -E "react|native|typescript|javascript|expo"; then
+        context=$(sed -n '/=== React Native Integration/,/^===/p' "$KNOWLEDGE_BASE" 2>/dev/null)
+    elif echo "$query_lower" | grep -q -E "flutter|dart"; then
+        context=$(sed -n '/=== Flutter Integration/,/^===/p' "$KNOWLEDGE_BASE" 2>/dev/null)
+    fi
+
+    # If no platform-specific match, search for keywords
+    if [ -z "$context" ]; then
+        context=$(grep -i -B 2 -A 10 "$query" "$KNOWLEDGE_BASE" 2>/dev/null | head -n $max_lines)
+    fi
+
+    # If still no match, return common methods section
+    if [ -z "$context" ]; then
+        context=$(sed -n '/=== Common SDK Methods/,/^===/p' "$KNOWLEDGE_BASE" 2>/dev/null)
+    fi
+
+    echo "$context"
 }
 
 # Main AI chat interface
@@ -388,23 +566,45 @@ show_ai_menu() {
         echo ""
         print_info "Ask questions about TrustArc SDK integration"
         print_substep "Knowledge base auto-syncs from GitHub on each load"
+
+        # Show project scan status
+        if is_project_scan_enabled; then
+            local proj_size=$(du -h "$PROJECT_CONTEXT" | cut -f1)
+            print_substep "Project scanning: ENABLED ($proj_size)"
+        else
+            print_substep "Project scanning: DISABLED"
+        fi
+
         echo ""
         print_menu_option "1" "Chat with AI Assistant"
-        print_menu_option "2" "View AI status"
-        print_menu_option "3" "Back to main menu"
+        print_menu_option "2" "Scan project (enables context-aware answers)"
+        print_menu_option "3" "Clear project scan"
+        print_menu_option "4" "View AI status"
+        print_menu_option "5" "Back to main menu"
         echo ""
-        read -p $'\033[0;34mEnter your choice (1-3): \033[0m' ai_choice
+        read -p $'\033[0;34mEnter your choice (1-5): \033[0m' ai_choice
 
         case "$ai_choice" in
             1)
                 ai_chat
                 ;;
             2)
-                show_ai_status
+                enable_project_scan
                 echo ""
                 read -p "Press enter to continue..."
                 ;;
             3)
+                echo ""
+                disable_project_scan
+                echo ""
+                read -p "Press enter to continue..."
+                ;;
+            4)
+                show_ai_status
+                echo ""
+                read -p "Press enter to continue..."
+                ;;
+            5)
                 return 0
                 ;;
             *)
@@ -445,6 +645,19 @@ show_ai_status() {
         print_substep "Size: $kb_size ($kb_lines lines)"
     else
         print_warning "Knowledge base: Empty"
+    fi
+
+    # Check project scan status
+    echo ""
+    if is_project_scan_enabled; then
+        print_success "Project scanning: ENABLED"
+        local proj_size=$(du -h "$PROJECT_CONTEXT" | cut -f1)
+        local scan_date=$(head -3 "$PROJECT_CONTEXT" | tail -1 | cut -d: -f2-)
+        print_substep "Size: $proj_size"
+        print_substep "Scanned:$scan_date"
+    else
+        print_warning "Project scanning: DISABLED"
+        print_substep "Enable to get context-aware answers about your code"
     fi
 
     # Check disk usage
