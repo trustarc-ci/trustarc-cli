@@ -248,7 +248,9 @@ scan_project() {
                 echo "" >> "$PROJECT_CONTEXT"
                 file_count=$((file_count + 1))
             fi
-        done < <(find "$scan_dir" -name "*.swift" -type f 2>/dev/null)
+        done <<EOF
+$(find "$scan_dir" -name "*.swift" -type f 2>/dev/null)
+EOF
         print_substep "Found Swift files ($file_count)"
     fi
 
@@ -264,7 +266,9 @@ scan_project() {
                 echo "" >> "$PROJECT_CONTEXT"
                 kt_count=$((kt_count + 1))
             fi
-        done < <(find "$scan_dir" -name "*.kt" -type f 2>/dev/null)
+        done <<EOF
+$(find "$scan_dir" -name "*.kt" -type f 2>/dev/null)
+EOF
         print_substep "Found Kotlin files ($kt_count)"
     fi
 
@@ -280,7 +284,9 @@ scan_project() {
                 echo "" >> "$PROJECT_CONTEXT"
                 js_count=$((js_count + 1))
             fi
-        done < <(find "$scan_dir" \( -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" \) -type f 2>/dev/null)
+        done <<EOF
+$(find "$scan_dir" \( -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" \) -type f 2>/dev/null)
+EOF
         print_substep "Found TypeScript/JavaScript files ($js_count)"
     fi
 
@@ -296,7 +302,9 @@ scan_project() {
                 echo "" >> "$PROJECT_CONTEXT"
                 dart_count=$((dart_count + 1))
             fi
-        done < <(find "$scan_dir" -name "*.dart" -type f 2>/dev/null)
+        done <<EOF
+$(find "$scan_dir" -name "*.dart" -type f 2>/dev/null)
+EOF
         print_substep "Found Dart files ($dart_count)"
     fi
 

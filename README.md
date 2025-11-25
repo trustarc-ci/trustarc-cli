@@ -26,7 +26,7 @@ A command-line installer for integrating the TrustArc Mobile Consent SDK into yo
 Run the installer directly from GitHub:
 
 ```bash
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
 ```
 
 ### Method 2: Run with Cache Bypass
@@ -34,7 +34,7 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/r
 If you need the latest version and want to bypass any caching:
 
 ```bash
-sh -c "$(curl -fsSL -H 'Cache-Control: no-cache, no-store, must-revalidate' https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
+bash -c "$(curl -fsSL -H 'Cache-Control: no-cache, no-store, must-revalidate' https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
 ```
 
 ### Method 3: Using wget
@@ -42,7 +42,7 @@ sh -c "$(curl -fsSL -H 'Cache-Control: no-cache, no-store, must-revalidate' http
 If you don't have curl installed:
 
 ```bash
-sh -c "$(wget https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh -O -)"
+bash -c "$(wget https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh -O -)"
 ```
 
 ### Method 4: Clone and Run Locally
@@ -338,7 +338,7 @@ To remove all CLI configuration and tokens:
 
 1. Run the installer again:
    ```bash
-   sh -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
    ```
 
 2. Select option **3) Clean up (remove token and config)**
@@ -415,7 +415,7 @@ This will:
 ### Getting the latest version
 Use the cache-bypass command:
 ```bash
-sh -c "$(curl -fsSL -H 'Cache-Control: no-cache, no-store, must-revalidate' https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
+bash -c "$(curl -fsSL -H 'Cache-Control: no-cache, no-store, must-revalidate' https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
 ```
 
 ## Support
