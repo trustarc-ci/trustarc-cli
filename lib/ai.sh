@@ -13,17 +13,28 @@ PROJECT_CONTEXT="$AI_DIR/project-context.txt"
 PROJECT_SCAN_ENABLED="$AI_DIR/.scan-enabled"
 REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main"
 
-# Model configuration (Llama 3.2 1B Instruct Q4 quantized ~700MB)
-MODEL_NAME="Llama-3.2-1B-Instruct-Q4_K_M.gguf"
-MODEL_URL="https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+# Model options (name|url|size|note)
+DEFAULT_MODEL_KEY="llama-3.1-8b"
+MODEL_OPTIONS=(
+    "llama-3.1-8b|Llama-3.1-8B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.1-8B-Instruct-GGUF/resolve/main/Llama-3.1-8B-Instruct-Q4_K_M.gguf|~5.5 GB|[recommended] Balanced accuracy vs. size"
+    "llama-3.2-3b|Llama-3.2-3B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf|~2.2 GB|Faster, good quality"
+    "llama-3.2-1b|Llama-3.2-1B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf|~0.7 GB|[not accurate but fast] Smallest footprint"
+)
+
+# Selected model metadata (populated by choose_ai_model)
+MODEL_NAME=""
+MODEL_URL=""
+MODEL_SIZE_LABEL=""
+MODEL_NOTE=""
+CURRENT_MODEL_KEY=""
 
 # llama.cpp binary URLs
 LLAMACPP_VERSION="b4216"
 LLAMACPP_MACOS_URL="https://github.com/ggerganov/llama.cpp/releases/download/${LLAMACPP_VERSION}/llama-${LLAMACPP_VERSION}-bin-macos-arm64.zip"
 LLAMACPP_LINUX_URL="https://github.com/ggerganov/llama.cpp/releases/download/${LLAMACPP_VERSION}/llama-${LLAMACPP_VERSION}-bin-ubuntu-x64.zip"
 
-# Detect OS and architecture
-detect_platform() {
+# Detect OS and architecture (avoid clashing with project platform detector)
+detect_host_platform() {
     local os=$(uname -s)
     local arch=$(uname -m)
 
@@ -49,6 +60,74 @@ init_ai_dirs() {
     mkdir -p "$MODEL_DIR" "$BIN_DIR" "$DOCS_DIR"
 }
 
+# Load model metadata into globals
+set_model_by_key() {
+    local key=$1
+    for option in "${MODEL_OPTIONS[@]}"; do
+        IFS="|" read -r opt_key opt_name opt_url opt_size opt_note <<< "$option"
+        if [ "$opt_key" = "$key" ]; then
+            MODEL_NAME="$opt_name"
+            MODEL_URL="$opt_url"
+            MODEL_SIZE_LABEL="$opt_size"
+            MODEL_NOTE="$opt_note"
+            CURRENT_MODEL_KEY="$opt_key"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Prompt the user to pick a model (with sizes and recommendations)
+choose_ai_model() {
+    init_ai_dirs
+    clear
+    print_header "AI Model Selection"
+    echo ""
+    print_info "Pick a model to balance speed vs. accuracy"
+    print_info "Recommended: Llama 3.1 8B Instruct (better grounding)"
+    echo ""
+
+    local idx=1
+    for option in "${MODEL_OPTIONS[@]}"; do
+        IFS="|" read -r opt_key opt_name _ opt_size opt_note <<< "$option"
+        local label="[$idx] $opt_name ($opt_size) $opt_note"
+        if [ "$opt_key" = "$DEFAULT_MODEL_KEY" ]; then
+            label="$label (default)"
+        fi
+        echo "$label"
+        idx=$((idx + 1))
+    done
+
+    echo ""
+    read -p "Select a model [1-$((idx - 1))] (enter for default): " model_choice
+
+    if [ -z "$model_choice" ]; then
+        model_choice=1
+    fi
+
+    local chosen_index=1
+    local chosen_key=""
+    for option in "${MODEL_OPTIONS[@]}"; do
+        IFS="|" read -r opt_key _ <<< "$option"
+        if [ "$chosen_index" -eq "$model_choice" ]; then
+            chosen_key="$opt_key"
+            break
+        fi
+        chosen_index=$((chosen_index + 1))
+    done
+
+    if [ -z "$chosen_key" ]; then
+        print_warning "Invalid choice. Using default model."
+        chosen_key="$DEFAULT_MODEL_KEY"
+    fi
+
+    set_model_by_key "$chosen_key" || set_model_by_key "$DEFAULT_MODEL_KEY"
+
+    echo ""
+    print_success "Selected model: $MODEL_NAME ($MODEL_SIZE_LABEL) $MODEL_NOTE"
+    echo ""
+}
+
 # Download with progress bar
 download_with_progress() {
     local url=$1
@@ -71,7 +150,7 @@ download_with_progress() {
 
 # Download and setup llama.cpp
 setup_llamacpp() {
-    local platform=$(detect_platform)
+    local platform=$(detect_host_platform)
 
     if [ "$platform" = "unsupported" ]; then
         print_error "Unsupported platform. AI assistant requires macOS or Linux."
@@ -132,14 +211,16 @@ setup_llamacpp() {
 setup_model() {
     local model_path="$MODEL_DIR/$MODEL_NAME"
 
+    mkdir -p "$MODEL_DIR"
+
     # Check if already downloaded
     if [ -f "$model_path" ]; then
         print_success "AI model already downloaded"
         return 0
     fi
 
-    print_step "Downloading AI model (DeepSeek-Coder 1.3B, ~700MB)..."
-    print_info "This is a one-time download. Future uses will be instant."
+    print_step "Downloading AI model: $MODEL_NAME ($MODEL_SIZE_LABEL)"
+    print_info "One-time download. Future uses will be instant."
     echo ""
 
     # Download model
@@ -362,26 +443,40 @@ run_inference() {
     local model_path="$MODEL_DIR/$MODEL_NAME"
     local llamacpp="$BIN_DIR/llama-cli"
 
-    # Build prompt using Llama 3 chat format
-    local system_msg="You are a helpful TrustArc SDK assistant. Answer questions concisely (2-3 sentences max).
+    # Ensure dependencies exist to avoid exiting the parent script when set -e is on
+    if [ ! -x "$llamacpp" ]; then
+        print_error "Inference engine not found at $llamacpp. Run AI setup from the menu."
+        return 1
+    fi
 
-The TrustArc SDK has 3 main functions:
+    if [ ! -f "$model_path" ]; then
+        print_error "AI model missing at $model_path. Choose a model and run setup."
+        return 1
+    fi
+
+    # Build prompt using Llama 3 chat format
+    local system_msg="You are a helpful TrustArc SDK assistant.
+- Only answer using the provided TrustArc documentation and project context below.
+- If the documentation does not contain the answer, say you do not know and suggest what information to provide.
+- Keep responses concise (2-3 sentences) and actionable.
+
+Key SDK methods:
 - initialize() - Setup the SDK
 - openCm() - Show consent dialog
 - getConsentData() - Get consent data"
 
     # Add documentation context
     if [ -n "$context" ]; then
-        local limited_context=$(echo "$context" | head -20)
+        local limited_context=$(echo "$context" | head -200)
         system_msg="${system_msg}
 
-Reference Documentation:
+Reference Documentation (truncated):
 ${limited_context}"
     fi
 
     # Add project context if enabled
     if is_project_scan_enabled; then
-        local project_ctx=$(head -30 "$PROJECT_CONTEXT" 2>/dev/null)
+        local project_ctx=$(head -200 "$PROJECT_CONTEXT" 2>/dev/null)
         if [ -n "$project_ctx" ]; then
             system_msg="${system_msg}
 
@@ -406,10 +501,11 @@ ${prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
         -p "$full_prompt" \
         -n 512 \
         -c 1024 \
-        --temp 0.6 \
-        --top-p 0.9 \
-        --top-k 40 \
-        --repeat-penalty 1.1 \
+        --temp 0.3 \
+        --top-p 0.85 \
+        --top-k 50 \
+        --repeat-penalty 1.15 \
+        --seed 1234 \
         -t 4 \
         --no-display-prompt \
         2>/dev/null
@@ -418,7 +514,7 @@ ${prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 # Search knowledge base for relevant context
 search_knowledge_base() {
     local query=$1
-    local max_lines=50
+    local max_lines=200
 
     if [ ! -f "$KNOWLEDGE_BASE" ]; then
         echo ""
@@ -461,6 +557,15 @@ ai_chat() {
     print_info "Type 'exit' or 'quit' to return to main menu"
     echo ""
 
+    # Ensure a model is selected and available
+    if [ -z "$MODEL_NAME" ] || [ ! -f "$MODEL_DIR/$MODEL_NAME" ]; then
+        choose_ai_model
+        if ! setup_model; then
+            print_error "Model setup failed. Returning to menu."
+            return 1
+        fi
+    fi
+
     while true; do
         printf "${CYAN}You:${NC} "
         read -r user_input
@@ -479,9 +584,18 @@ ai_chat() {
         # Search knowledge base for context
         local context=$(search_knowledge_base "$user_input")
 
+        if [ -z "$context" ] && ! is_project_scan_enabled; then
+            print_warning "No matching documentation found for that query. Try a more specific question or enable project scanning."
+            echo ""
+            continue
+        fi
+
         # Run inference
         printf "\n${GREEN}AI:${NC} "
-        run_inference "$user_input" "$context"
+        if ! run_inference "$user_input" "$context"; then
+            echo ""
+            print_error "AI response failed. Try 'AI status' from the menu to re-run setup."
+        fi
         echo -e "\n"
     done
 }
@@ -489,6 +603,11 @@ ai_chat() {
 # Setup AI (download everything if needed)
 setup_ai() {
     print_header "AI Assistant Setup"
+
+    # Ensure a model is selected
+    if [ -z "$MODEL_NAME" ] || [ -z "$MODEL_URL" ]; then
+        choose_ai_model
+    fi
 
     # Initialize directories
     init_ai_dirs
@@ -522,10 +641,15 @@ is_ai_ready() {
 
 # Show AI assistant menu
 show_ai_menu() {
+    if [ -z "$CURRENT_MODEL_KEY" ]; then
+        set_model_by_key "$DEFAULT_MODEL_KEY"
+    fi
+
     if ! is_ai_ready; then
         print_warning "AI Assistant not yet configured"
         echo ""
-        read -p "Download and setup AI assistant? (~700MB, one-time) (y/n): " setup_choice
+        choose_ai_model
+        read -p "Download and setup AI assistant? ($MODEL_SIZE_LABEL, one-time) (y/n): " setup_choice
 
         if [ "$setup_choice" = "y" ] || [ "$setup_choice" = "Y" ]; then
             if ! setup_ai; then
@@ -552,6 +676,7 @@ show_ai_menu() {
         echo ""
         print_info "Ask questions about TrustArc SDK integration"
         print_substep "Knowledge base auto-syncs from GitHub on each load"
+        print_substep "Model: ${MODEL_NAME:-not selected} ${MODEL_SIZE_LABEL:+($MODEL_SIZE_LABEL)} ${MODEL_NOTE}"
 
         # Show project scan status
         if is_project_scan_enabled; then
@@ -563,34 +688,44 @@ show_ai_menu() {
 
         echo ""
         print_menu_option "1" "Chat with AI Assistant"
-        print_menu_option "2" "Scan project (enables context-aware answers)"
-        print_menu_option "3" "Clear project scan"
-        print_menu_option "4" "View AI status"
-        print_menu_option "5" "Back to main menu"
+        print_menu_option "2" "Change AI model (download if needed)"
+        print_menu_option "3" "Scan project (enables context-aware answers)"
+        print_menu_option "4" "Clear project scan"
+        print_menu_option "5" "View AI status"
+        print_menu_option "6" "Back to main menu"
         echo ""
-        read -p $'\033[0;34mEnter your choice (1-5): \033[0m' ai_choice
+        read -p $'\033[0;34mEnter your choice (1-6): \033[0m' ai_choice
 
         case "$ai_choice" in
             1)
                 ai_chat
                 ;;
             2)
-                enable_project_scan
+                choose_ai_model
+                if ! setup_model; then
+                    print_error "Failed to download selected model."
+                fi
                 echo ""
                 read -p "Press enter to continue..."
                 ;;
             3)
                 echo ""
-                disable_project_scan
+                enable_project_scan
                 echo ""
                 read -p "Press enter to continue..."
                 ;;
             4)
-                show_ai_status
+                echo ""
+                disable_project_scan
                 echo ""
                 read -p "Press enter to continue..."
                 ;;
             5)
+                show_ai_status
+                echo ""
+                read -p "Press enter to continue..."
+                ;;
+            6)
                 return 0
                 ;;
             *)
@@ -616,11 +751,20 @@ show_ai_status() {
 
     # Check model
     if [ -f "$MODEL_DIR/$MODEL_NAME" ]; then
-        print_success "AI Model: Downloaded"
+        print_success "AI Model: $MODEL_NAME (downloaded)"
         local model_size=$(du -h "$MODEL_DIR/$MODEL_NAME" | cut -f1)
-        print_substep "Size: $model_size"
+        print_substep "Size on disk: $model_size"
+        if [ -n "$MODEL_SIZE_LABEL" ]; then
+            print_substep "Expected size: $MODEL_SIZE_LABEL"
+        fi
+        if [ -n "$MODEL_NOTE" ]; then
+            print_substep "Note: $MODEL_NOTE"
+        fi
     else
         print_error "AI Model: Not downloaded"
+        if [ -n "$MODEL_NAME" ]; then
+            print_substep "Selected: $MODEL_NAME ${MODEL_SIZE_LABEL:+($MODEL_SIZE_LABEL)} ${MODEL_NOTE}"
+        fi
     fi
 
     # Check knowledge base
@@ -664,5 +808,8 @@ ai_ask() {
     fi
 
     local context=$(search_knowledge_base "$question")
-    run_inference "$question" "$context"
+    if ! run_inference "$question" "$context"; then
+        print_error "AI response failed. Re-run AI setup and try again."
+        return 1
+    fi
 }
