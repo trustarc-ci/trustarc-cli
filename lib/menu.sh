@@ -283,7 +283,7 @@ integrate_sdk() {
         echo ""
         print_error "Could not detect platform type"
         print_info "Supported platforms (integration requires GitHub token with repo + read:package scopes):"
-        echo "  - iOS (Swift Package Manager / CocoaPods)"
+        echo "  - iOS (CocoaPods)"
         echo "  - Android"
         echo "  - React Native"
         echo "  - Flutter"
@@ -306,7 +306,7 @@ download_sample_menu() {
 
     echo "Select platform:"
     echo ""
-    echo "  ${BOLD}1${NC}) iOS (Swift Package Manager / CocoaPods)"
+    echo "  ${BOLD}1${NC}) iOS (CocoaPods)"
     echo "  ${BOLD}2${NC}) Android"
     echo "  ${BOLD}3${NC}) React Native (Expo)"
     echo "  ${BOLD}4${NC}) React Native (Bare Metal)"
