@@ -101,4 +101,36 @@ save_to_env() {
     fi
 
     save_config "TRUSTARC_TOKEN" "$token"
+    save_to_netrc "$token"
+}
+
+# Save token to .netrc for Git authentication
+save_to_netrc() {
+    local token=$1
+    local netrc_file="$HOME/.netrc"
+
+    print_info "Configuring .netrc for Git authentication..."
+
+    # Backup existing .netrc if it exists
+    if [ -f "$netrc_file" ]; then
+        cp "$netrc_file" "$netrc_file.backup"
+        # Remove existing github.com entry
+        sed -i.tmp '/^machine github\.com$/,/^$/d' "$netrc_file" 2>/dev/null || true
+        rm -f "$netrc_file.tmp"
+    fi
+
+    # Add GitHub credentials to .netrc
+    cat >> "$netrc_file" << EOF
+
+machine github.com
+login token
+password $token
+EOF
+
+    # Set proper permissions (required for Git to use .netrc)
+    chmod 600 "$netrc_file"
+
+    print_success ".netrc configured with GitHub token"
+    print_substep "File: $netrc_file"
+    print_substep "Permissions: 600 (owner read/write only)"
 }

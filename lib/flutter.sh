@@ -85,10 +85,10 @@ add_trustarc_to_pubspec() {
         return 1
     fi
 
-    # Create the dependency entry with token placeholder
+    # Create the dependency entry (using HTTPS - authentication via .netrc)
     local sdk_entry="  flutter_trustarc_mobile_consent_sdk:
     git:
-      url: https://YOUR_GITHUB_TOKEN@github.com/trustarc/trustarc-mobile-consent.git
+      url: https://github.com/trustarc/trustarc-mobile-consent.git
       ref: $version
       path: flutter"
 

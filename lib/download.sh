@@ -70,7 +70,7 @@ update_config_files() {
             fi
             ;;
 
-        "react-native")
+        "react-native"|"react-native-baremetal")
             # Update React Native app.config.ts
             local rn_config="$app_dir/config/app.config.ts"
             if [ -f "$rn_config" ]; then
@@ -196,6 +196,10 @@ download_sample_app() {
         "react-native")
             platform_type="react-native"
             platform_dir="react"
+            ;;
+        "react-native-baremetal")
+            platform_type="react-native-baremetal"
+            platform_dir="react-baremetal"
             ;;
         "flutter")
             platform_type="flutter"

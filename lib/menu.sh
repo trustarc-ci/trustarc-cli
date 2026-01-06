@@ -309,18 +309,20 @@ download_sample_menu() {
     echo "  ${BOLD}1${NC}) iOS (Swift Package Manager / CocoaPods)"
     echo "  ${BOLD}2${NC}) Android"
     echo "  ${BOLD}3${NC}) React Native (Expo)"
-    echo "  ${BOLD}4${NC}) Flutter"
-    echo "  ${BOLD}5${NC}) Back to main menu"
+    echo "  ${BOLD}4${NC}) React Native (Bare Metal)"
+    echo "  ${BOLD}5${NC}) Flutter"
+    echo "  ${BOLD}6${NC}) Back to main menu"
     echo ""
-    read -p "Enter your choice (1-5): " platform_choice
+    read -p "Enter your choice (1-6): " platform_choice
 
     local platform=""
     case "$platform_choice" in
         1) platform="ios" ;;
         2) platform="android" ;;
         3) platform="react-native" ;;
-        4) platform="flutter" ;;
-        5) show_main_menu; return ;;
+        4) platform="react-native-baremetal" ;;
+        5) platform="flutter" ;;
+        6) show_main_menu; return ;;
         *) print_error "Invalid choice"; download_sample_menu; return ;;
     esac
 
