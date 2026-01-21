@@ -137,7 +137,7 @@ download_with_progress() {
     print_step "Downloading $description..."
 
     if command -v curl >/dev/null 2>&1; then
-        curl -L --progress-bar "$url" -o "$output"
+        curl -fL --progress-bar "$url" -o "$output"
     elif command -v wget >/dev/null 2>&1; then
         wget --show-progress -q "$url" -O "$output"
     else
@@ -146,6 +146,62 @@ download_with_progress() {
     fi
 
     return 0
+}
+
+# Detect basic GGUF validity (magic header and non-trivial size)
+get_file_size_bytes() {
+    local file=$1
+    if stat -f%z "$file" >/dev/null 2>&1; then
+        stat -f%z "$file"
+    elif stat -c%s "$file" >/dev/null 2>&1; then
+        stat -c%s "$file"
+    else
+        wc -c < "$file" | tr -d ' '
+    fi
+}
+
+get_file_magic_hex() {
+    local file=$1
+    if command -v od >/dev/null 2>&1; then
+        od -An -t x1 -N 4 "$file" 2>/dev/null | tr -d ' \n'
+    else
+        echo ""
+    fi
+}
+
+is_valid_gguf_model() {
+    local file=$1
+    if [ ! -f "$file" ]; then
+        return 1
+    fi
+
+    local magic=$(head -c 4 "$file" 2>/dev/null)
+    if [ "$magic" != "GGUF" ]; then
+        return 1
+    fi
+
+    local size_bytes=$(get_file_size_bytes "$file")
+    if [ -n "$size_bytes" ] && [ "$size_bytes" -lt 1000000 ]; then
+        return 1
+    fi
+
+    return 0
+}
+
+validate_gguf_model() {
+    local file=$1
+    if is_valid_gguf_model "$file"; then
+        return 0
+    fi
+
+    local magic_hex=$(get_file_magic_hex "$file")
+    if [ -n "$magic_hex" ]; then
+        print_error "Downloaded model is not a valid GGUF file (magic: $magic_hex)"
+    else
+        print_error "Downloaded model is not a valid GGUF file"
+    fi
+    print_info "Check network access to huggingface.co or any proxy/captive auth."
+    return 1
 }
 
 # Download and setup llama.cpp
@@ -215,8 +271,13 @@ setup_model() {
 
     # Check if already downloaded
     if [ -f "$model_path" ]; then
-        print_success "AI model already downloaded"
-        return 0
+        if is_valid_gguf_model "$model_path"; then
+            print_success "AI model already downloaded"
+            return 0
+        fi
+
+        print_warning "Existing model file is invalid. Re-downloading..."
+        rm -f "$model_path"
     fi
 
     print_step "Downloading AI model: $MODEL_NAME ($MODEL_SIZE_LABEL)"
@@ -226,6 +287,11 @@ setup_model() {
     # Download model
     if ! download_with_progress "$MODEL_URL" "$model_path" "AI model"; then
         print_error "Failed to download AI model"
+        rm -f "$model_path"
+        return 1
+    fi
+
+    if ! validate_gguf_model "$model_path"; then
         rm -f "$model_path"
         return 1
     fi
@@ -453,6 +519,10 @@ run_inference() {
         print_error "AI model missing at $model_path. Choose a model and run setup."
         return 1
     fi
+    if ! is_valid_gguf_model "$model_path"; then
+        print_error "AI model file is invalid. Re-run AI setup from the menu."
+        return 1
+    fi
 
     # Build prompt using Llama 3 chat format
     local system_msg="You are a helpful TrustArc SDK assistant.
@@ -636,7 +706,7 @@ setup_ai() {
 
 # Check if AI is ready
 is_ai_ready() {
-    [ -f "$BIN_DIR/llama-cli" ] && [ -f "$MODEL_DIR/$MODEL_NAME" ]
+    [ -f "$BIN_DIR/llama-cli" ] && is_valid_gguf_model "$MODEL_DIR/$MODEL_NAME"
 }
 
 # Show AI assistant menu
@@ -750,7 +820,7 @@ show_ai_status() {
     fi
 
     # Check model
-    if [ -f "$MODEL_DIR/$MODEL_NAME" ]; then
+    if is_valid_gguf_model "$MODEL_DIR/$MODEL_NAME"; then
         print_success "AI Model: $MODEL_NAME (downloaded)"
         local model_size=$(du -h "$MODEL_DIR/$MODEL_NAME" | cut -f1)
         print_substep "Size on disk: $model_size"
@@ -760,6 +830,9 @@ show_ai_status() {
         if [ -n "$MODEL_NOTE" ]; then
             print_substep "Note: $MODEL_NOTE"
         fi
+    elif [ -f "$MODEL_DIR/$MODEL_NAME" ]; then
+        print_error "AI Model: $MODEL_NAME (invalid file)"
+        print_substep "Delete and re-download from the AI menu"
     else
         print_error "AI Model: Not downloaded"
         if [ -n "$MODEL_NAME" ]; then
