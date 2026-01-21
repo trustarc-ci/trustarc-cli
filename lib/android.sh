@@ -27,7 +27,7 @@ has_kotlin_support() {
 
 # Load AGP-Kotlin compatibility data from GitHub
 load_agp_kotlin_compatibility() {
-    local json_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/main/lib/agp-kotlin-compatibility.json"
+    local json_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/testing/lib/agp-kotlin-compatibility.json"
     local temp_json="/tmp/trustarc-agp-kotlin-$$.json"
 
     # Try to fetch from GitHub
@@ -927,7 +927,7 @@ create_android_boilerplate() {
     done
 
     # Download boilerplate from GitHub
-    local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/main/$file_name"
+    local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/testing/$file_name"
     local temp_boilerplate="/tmp/trustarc-boilerplate-$$.kt"
 
     echo ""

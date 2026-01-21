@@ -393,7 +393,7 @@ create_ios_boilerplate() {
     done
 
     # Download boilerplate from GitHub
-    local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/main/TrustArcConsentImpl.swift"
+    local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/testing/TrustArcConsentImpl.swift"
     local temp_boilerplate="/tmp/trustarc-boilerplate-$$.swift"
 
     echo ""

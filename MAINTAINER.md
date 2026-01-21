@@ -190,7 +190,7 @@ git add lib/knowledge-base.txt
 git commit -m "Update AI knowledge base with new documentation"
 
 # Push to repository
-git push origin main
+git push origin testing
 ```
 
 **Important:** After you push, users will automatically get the updates. The knowledge base:

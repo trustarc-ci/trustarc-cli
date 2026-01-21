@@ -11,7 +11,7 @@ DOCS_DIR="$AI_DIR/docs"
 KNOWLEDGE_BASE="$AI_DIR/knowledge.txt"
 PROJECT_CONTEXT="$AI_DIR/project-context.txt"
 PROJECT_SCAN_ENABLED="$AI_DIR/.scan-enabled"
-REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main"
+REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/testing"
 
 # Model options (name|url|size|note)
 DEFAULT_MODEL_KEY="llama-3.1-8b"

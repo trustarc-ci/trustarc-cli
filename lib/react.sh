@@ -460,7 +460,7 @@ create_react_native_boilerplate() {
     local target_file="$target_dir/$file_name"
 
     # Download boilerplate from GitHub
-    local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/main/TrustArcConsentImpl.$file_extension"
+    local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/testing/TrustArcConsentImpl.$file_extension"
     local temp_boilerplate="/tmp/trustarc-boilerplate-$$.$file_extension"
 
     echo ""

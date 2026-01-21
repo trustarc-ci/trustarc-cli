@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # TrustArc CLI Installation Script
-# Usage: bash -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
-#    or: bash -c "$(wget https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh -O -)"
+# Usage: bash -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/testing/install.sh)"
+#    or: bash -c "$(wget https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/testing/install.sh -O -)"
 
 set -e
 
@@ -11,7 +11,8 @@ rm -rf /tmp/trustarc-cli-lib-* 2>/dev/null || true
 rm -rf /tmp/trustarc-boilerplate-* 2>/dev/null || true
 
 # GitHub repository base URL for raw content
-REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main"
+REPO_REF="${TRUSTARC_REF:-testing}"
+REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/${REPO_REF}"
 
 # Temporary directory for downloaded modules
 TMP_LIB_DIR="/tmp/trustarc-cli-lib-$$"

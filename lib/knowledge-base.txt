@@ -174,7 +174,7 @@ All platforms support these three core methods:
 
 Use the TrustArc CLI to automatically integrate:
 ```bash
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/testing/install.sh)"
 ```
 
 The CLI will:
