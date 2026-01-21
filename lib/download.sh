@@ -9,6 +9,195 @@ SAMPLE_REPO_BRANCH="testing"
 SAMPLE_REPO_TREE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/tree/${SAMPLE_REPO_BRANCH}"
 SAMPLE_REPO_ARCHIVE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/heads/${SAMPLE_REPO_BRANCH}.zip"
 
+# Dependency checks for sample app platforms
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+is_macos() {
+    [[ "$OSTYPE" == "darwin"* ]]
+}
+
+detect_android_sdk() {
+    local candidates=()
+
+    if [ -n "$ANDROID_SDK_ROOT" ]; then
+        candidates+=("$ANDROID_SDK_ROOT")
+    fi
+    if [ -n "$ANDROID_HOME" ]; then
+        candidates+=("$ANDROID_HOME")
+    fi
+    candidates+=("$HOME/Library/Android/sdk" "$HOME/Android/Sdk")
+
+    local path=""
+    for path in "${candidates[@]}"; do
+        if [ -n "$path" ] && [ -d "$path" ]; then
+            echo "$path"
+            return 0
+        fi
+    done
+
+    if command_exists sdkmanager; then
+        echo "sdkmanager"
+        return 0
+    fi
+
+    return 1
+}
+
+check_platform_dependencies() {
+    local platform=$1
+    local -a missing=()
+    local -a warnings=()
+    local ios_ok=0
+    local android_ok=0
+    local has_java=0
+    local has_android_sdk=0
+
+    print_step "Checking dependencies for $platform..."
+
+    case "$platform" in
+        "ios")
+            if ! is_macos; then
+                missing+=("macOS (required for iOS builds)")
+            else
+                command_exists xcodebuild || missing+=("Xcode Command Line Tools (xcodebuild)")
+                command_exists pod || missing+=("CocoaPods (pod)")
+            fi
+            ;;
+        "android")
+            command_exists java || missing+=("Java (JDK)")
+            if ! detect_android_sdk >/dev/null 2>&1; then
+                missing+=("Android SDK (ANDROID_SDK_ROOT/ANDROID_HOME or sdkmanager)")
+            fi
+            ;;
+        "react-native")
+            command_exists node || missing+=("Node.js (node)")
+            command_exists npm || missing+=("npm")
+            command_exists npx || missing+=("npx")
+
+            if is_macos; then
+                command_exists xcodebuild || warnings+=("Xcode not found (required for iOS runs)")
+                command_exists pod || warnings+=("CocoaPods not found (required for iOS runs)")
+                if command_exists xcodebuild && command_exists pod; then
+                    ios_ok=1
+                fi
+            else
+                warnings+=("iOS builds require macOS + Xcode")
+            fi
+
+            if command_exists java; then
+                has_java=1
+            else
+                warnings+=("Java (JDK) not found (required for Android runs)")
+            fi
+            if detect_android_sdk >/dev/null 2>&1; then
+                has_android_sdk=1
+            else
+                warnings+=("Android SDK not found (required for Android runs)")
+            fi
+            if [ "$has_java" -eq 1 ] && [ "$has_android_sdk" -eq 1 ]; then
+                android_ok=1
+            fi
+
+            if [ "$ios_ok" -eq 0 ] && [ "$android_ok" -eq 0 ]; then
+                missing+=("iOS (Xcode + CocoaPods) or Android (JDK + SDK) toolchain")
+            fi
+            ;;
+        "react-native-baremetal")
+            command_exists node || missing+=("Node.js (node)")
+            command_exists yarn || missing+=("Yarn (yarn)")
+
+            if is_macos; then
+                command_exists xcodebuild || warnings+=("Xcode not found (required for iOS runs)")
+                command_exists pod || warnings+=("CocoaPods not found (required for iOS runs)")
+                if command_exists xcodebuild && command_exists pod; then
+                    ios_ok=1
+                fi
+            else
+                warnings+=("iOS builds require macOS + Xcode")
+            fi
+
+            if command_exists java; then
+                has_java=1
+            else
+                warnings+=("Java (JDK) not found (required for Android runs)")
+            fi
+            if detect_android_sdk >/dev/null 2>&1; then
+                has_android_sdk=1
+            else
+                warnings+=("Android SDK not found (required for Android runs)")
+            fi
+            if [ "$has_java" -eq 1 ] && [ "$has_android_sdk" -eq 1 ]; then
+                android_ok=1
+            fi
+
+            if [ "$ios_ok" -eq 0 ] && [ "$android_ok" -eq 0 ]; then
+                missing+=("iOS (Xcode + CocoaPods) or Android (JDK + SDK) toolchain")
+            fi
+            ;;
+        "flutter")
+            command_exists flutter || missing+=("Flutter SDK (flutter)")
+
+            if is_macos; then
+                command_exists xcodebuild || warnings+=("Xcode not found (required for iOS runs)")
+                command_exists pod || warnings+=("CocoaPods not found (required for iOS runs)")
+                if command_exists xcodebuild && command_exists pod; then
+                    ios_ok=1
+                fi
+            else
+                warnings+=("iOS builds require macOS + Xcode")
+            fi
+
+            if command_exists java; then
+                has_java=1
+            else
+                warnings+=("Java (JDK) not found (required for Android runs)")
+            fi
+            if detect_android_sdk >/dev/null 2>&1; then
+                has_android_sdk=1
+            else
+                warnings+=("Android SDK not found (required for Android runs)")
+            fi
+            if [ "$has_java" -eq 1 ] && [ "$has_android_sdk" -eq 1 ]; then
+                android_ok=1
+            fi
+
+            if [ "$ios_ok" -eq 0 ] && [ "$android_ok" -eq 0 ]; then
+                missing+=("iOS (Xcode + CocoaPods) or Android (JDK + SDK) toolchain")
+            fi
+            ;;
+    esac
+
+    if [ ${#warnings[@]} -gt 0 ]; then
+        print_warning "Optional platform tooling not detected:"
+        local warning=""
+        for warning in "${warnings[@]}"; do
+            print_substep "$warning"
+        done
+        echo ""
+    fi
+
+    if [ ${#missing[@]} -eq 0 ]; then
+        print_success "Dependency check passed"
+        return 0
+    fi
+
+    print_error "Missing required dependencies for $platform:"
+    local item=""
+    for item in "${missing[@]}"; do
+        print_substep "$item"
+    done
+    echo ""
+    read -p "Continue download anyway? (y/n): " continue_download
+    if [ "$continue_download" != "y" ] && [ "$continue_download" != "Y" ]; then
+        print_info "Download canceled. Install the missing dependencies and try again."
+        return 1
+    fi
+
+    return 0
+}
+
 # Update configuration files in extracted sample app
 update_config_files() {
     local platform=$1
@@ -213,6 +402,7 @@ download_sample_app() {
     local temp_dir="trustarc-sample-${platform_type}-$$"
     local extract_dir="trustarc-sample-${platform_type}"
     local repo_root="${SAMPLE_REPO_NAME}-${SAMPLE_REPO_BRANCH}"
+    local should_redownload=false
 
     # Check if already extracted
     if [ -d "$extract_dir" ]; then
@@ -225,9 +415,17 @@ download_sample_app() {
             update_config_files "$platform_type" "$extract_dir" "$domain" "$website"
             return 0
         else
-            print_info "Removing existing directory..."
-            rm -rf "$extract_dir"
+            should_redownload=true
         fi
+    fi
+
+    if ! check_platform_dependencies "$platform"; then
+        return 1
+    fi
+
+    if [ "$should_redownload" = true ]; then
+        print_info "Removing existing directory..."
+        rm -rf "$extract_dir"
     fi
 
     echo ""
