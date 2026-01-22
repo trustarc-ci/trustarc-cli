@@ -25,6 +25,10 @@ class TrustArcConsentImpl {
   /// TrustArc domain name for consent management
   /// This will be replaced during CLI installation with your specific domain
   static const String domain = "__TRUSTARC_DOMAIN_PLACEHOLDER__";
+  static const String ipAddress = "";
+  static const String locale = "";
+  static const bool useGdprDetection = true;
+  static const SdkMode sdkMode = SdkMode.standard;
 
   // === SDK INSTANCE ===
   /// Singleton instance of the TrustArc Mobile Consent SDK
@@ -111,12 +115,13 @@ class TrustArcConsentImpl {
       _isLoading = true;
       debugPrint('TrustArc: Initializing SDK with domain: $domain');
 
-      // Initialize SDK in standard mode (production mode)
-      await _mobileSdk.initialize(SdkMode.standard);
+      // Initialize SDK in configured mode (standard or IAB TCF)
+      await _mobileSdk.initialize(sdkMode);
+      await _mobileSdk.useGdprDetection(useGdprDetection);
 
       // Start SDK with domain configuration
       // Empty IP and locale strings allow SDK to auto-detect
-      await _mobileSdk.start(domain, "", "");
+      await _mobileSdk.start(domain, ipAddress, locale);
 
       debugPrint('TrustArc: SDK initialization started successfully');
     } catch (error) {
@@ -223,6 +228,114 @@ class TrustArcConsentImpl {
       return consents;
     } catch (error) {
       debugPrint('TrustArc: Error getting consent status: $error');
+      return null;
+    }
+  }
+
+  /// Get stored consent data (SDK persistence)
+  ///
+  /// Returns a map of stored consent values if available.
+  static Future<Map<String, dynamic>?> getStoredConsentData() async {
+    if (!_isInitialized) {
+      debugPrint('TrustArc: Cannot get stored consent data - SDK not initialized');
+      return null;
+    }
+
+    try {
+      final storedConsent = await _mobileSdk.getStoredConsentData();
+      return json.decode(storedConsent) as Map<String, dynamic>;
+    } catch (error) {
+      debugPrint('TrustArc: Error getting stored consent data: $error');
+      return null;
+    }
+  }
+
+  /// Get IAB TCF preferences
+  ///
+  /// Returns the IAB preferences payload from the SDK.
+  static Future<dynamic> getIABTCFPreferences() async {
+    if (!_isInitialized) {
+      debugPrint('TrustArc: Cannot get IAB TCF preferences - SDK not initialized');
+      return null;
+    }
+
+    try {
+      return await _mobileSdk.getIABTCFPreferences();
+    } catch (error) {
+      debugPrint('TrustArc: Error getting IAB TCF preferences: $error');
+      return null;
+    }
+  }
+
+  /// Get Google consent mappings
+  ///
+  /// Returns Google consent data as a map.
+  static Future<Map<String, dynamic>?> getGoogleConsents() async {
+    if (!_isInitialized) {
+      debugPrint('TrustArc: Cannot get Google consents - SDK not initialized');
+      return null;
+    }
+
+    try {
+      final googleConsents = await _mobileSdk.getGoogleConsents();
+      return json.decode(googleConsents) as Map<String, dynamic>;
+    } catch (error) {
+      debugPrint('TrustArc: Error getting Google consents: $error');
+      return null;
+    }
+  }
+
+  /// Get TrustArc WebScript for WebView injection
+  ///
+  /// Returns an empty string when unavailable.
+  static Future<String> getWebScript() async {
+    if (!_isInitialized) {
+      debugPrint('TrustArc: Cannot get web script - SDK not initialized');
+      return '';
+    }
+
+    try {
+      return await _mobileSdk.getWebScript();
+    } catch (error) {
+      debugPrint('TrustArc: Error getting web script: $error');
+      return '';
+    }
+  }
+
+  /// Check if a consent category is granted by index
+  ///
+  /// Returns true/false when available, or null if SDK is not initialized.
+  static Future<bool?> isCategoryConsented(int categoryIndex) async {
+    if (!_isInitialized) {
+      debugPrint('TrustArc: Cannot check category consent - SDK not initialized');
+      return null;
+    }
+
+    try {
+      return await _mobileSdk.isCategoryConsented(categoryIndex);
+    } catch (error) {
+      debugPrint('TrustArc: Error checking category consent: $error');
+      return null;
+    }
+  }
+
+  /// Get consent details for a category index
+  ///
+  /// Returns a map with category details if available.
+  static Future<Map<String, dynamic>?> getCategoryConsent(int categoryIndex) async {
+    if (!_isInitialized) {
+      debugPrint('TrustArc: Cannot get category consent - SDK not initialized');
+      return null;
+    }
+
+    try {
+      final categoryConsent = await _mobileSdk.getCategoryConsent(categoryIndex);
+      if (categoryConsent == null || categoryConsent.isEmpty) {
+        return null;
+      }
+      return json.decode(categoryConsent) as Map<String, dynamic>;
+    } catch (error) {
+      debugPrint('TrustArc: Error getting category consent: $error');
       return null;
     }
   }

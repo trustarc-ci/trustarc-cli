@@ -18,7 +18,9 @@ import android.app.Application
 import android.util.Log
 import com.truste.androidmobileconsentsdk.SdkMode
 import com.truste.androidmobileconsentsdk.TrustArc
+import com.truste.androidmobileconsentsdk.vendors.TACategoryConsent
 import com.truste.androidmobileconsentsdk.vendors.TAConsent
+import org.json.JSONObject
 
 /**
  * TrustArc Consent Manager Implementation
@@ -55,7 +57,7 @@ object TrustArcConsentImpl {
     private var onConsentChangedCallback: ((Map<String, TAConsent>) -> Unit)? = null
 
     /// Callback function for Google consent changes
-    private var onGoogleConsentChangedCallback: ((Map<String, String>) -> Unit)? = null
+    private var onGoogleConsentChangedCallback: ((Map<String, Boolean>) -> Unit)? = null
 
     /// Callback function for SDK initialization completion
     private var onSdkInitFinishCallback: (() -> Unit)? = null
@@ -256,8 +258,8 @@ object TrustArcConsentImpl {
      * Example with Firebase:
      * ```kotlin
      * val googleConsents = TrustArcConsentImpl.getGoogleConsents()
-     * val adStorageConsent = googleConsents["ad_storage"] == "granted"
-     * val analyticsConsent = googleConsents["analytics_storage"] == "granted"
+     * val adStorageConsent = googleConsents["ad_storage"] == true
+     * val analyticsConsent = googleConsents["analytics_storage"] == true
      *
      * FirebaseAnalytics.getInstance(context).setConsent {
      *     adStorage(if (adStorageConsent) GRANTED else DENIED)
@@ -267,17 +269,95 @@ object TrustArcConsentImpl {
      *
      * @return Map of Google consent keys and their values
      */
-    fun getGoogleConsents(): Map<String, String> {
+    fun getGoogleConsents(): Map<String, Boolean> {
         if (!::trustArc.isInitialized) {
             Log.e(TAG, "TrustArc not initialized. Call initialize() first")
             return emptyMap()
         }
 
         return try {
-            trustArc.getGoogleConsents()
+            parseGoogleConsents(trustArc.getGoogleConsents())
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get Google consents", e)
             emptyMap()
+        }
+    }
+
+    /**
+     * Get IAB TCF string
+     *
+     * @return TCF string if available
+     */
+    fun getTcfString(): String? {
+        if (!::trustArc.isInitialized) {
+            Log.e(TAG, "TrustArc not initialized. Call initialize() first")
+            return null
+        }
+
+        return try {
+            trustArc.getTcfString()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get TCF string", e)
+            null
+        }
+    }
+
+    /**
+     * Get TrustArc WebScript for WebView injection
+     *
+     * @return WebScript string if available
+     */
+    fun getWebScript(): String? {
+        if (!::trustArc.isInitialized) {
+            Log.e(TAG, "TrustArc not initialized. Call initialize() first")
+            return null
+        }
+
+        return try {
+            trustArc.getWebScript()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get web script", e)
+            null
+        }
+    }
+
+    /**
+     * Check if a consent category is granted by index
+     *
+     * @param categoryIndex Consent category index
+     * @return true if consented
+     */
+    fun isCategoryConsented(categoryIndex: Int): Boolean {
+        if (!::trustArc.isInitialized) {
+            Log.e(TAG, "TrustArc not initialized. Call initialize() first")
+            return false
+        }
+
+        return try {
+            trustArc.isCategoryConsented(categoryIndex)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to check category consent", e)
+            false
+        }
+    }
+
+    /**
+     * Get consent details for a category index
+     *
+     * @param categoryIndex Consent category index
+     * @return Consent details if available
+     */
+    fun getCategoryConsent(categoryIndex: Int): TACategoryConsent? {
+        if (!::trustArc.isInitialized) {
+            Log.e(TAG, "TrustArc not initialized. Call initialize() first")
+            return null
+        }
+
+        return try {
+            trustArc.getCategoryConsent(categoryIndex)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get category consent", e)
+            null
         }
     }
 
@@ -384,8 +464,8 @@ object TrustArcConsentImpl {
      *     Log.d("GoogleConsent", "Google consent preferences changed")
      *
      *     // Update Google services configuration
-     *     val adStorageGranted = googleConsents["ad_storage"] == "granted"
-     *     val analyticsGranted = googleConsents["analytics_storage"] == "granted"
+     *     val adStorageGranted = googleConsents["ad_storage"] == true
+     *     val analyticsGranted = googleConsents["analytics_storage"] == true
      *
      *     // Configure Firebase Analytics
      *     FirebaseAnalytics.getInstance(context).setConsent {
@@ -397,7 +477,7 @@ object TrustArcConsentImpl {
      *
      * @param callback Function to call when Google consent changes
      */
-    fun onGoogleConsentChange(callback: (Map<String, String>) -> Unit) {
+    fun onGoogleConsentChange(callback: (Map<String, Boolean>) -> Unit) {
         onGoogleConsentChangedCallback = callback
     }
 
@@ -473,15 +553,35 @@ object TrustArcConsentImpl {
      *
      * @param googleConsents Updated Google consent data
      */
-    private fun handleGoogleConsentChanged(googleConsents: Map<String, String>) {
+    private fun handleGoogleConsentChanged(googleConsentsJson: String?) {
         if (ENABLE_DEBUG_LOGS) {
             Log.d(TAG, "Google consent data changed")
-            googleConsents.forEach { (key, value) ->
+            parseGoogleConsents(googleConsentsJson).forEach { (key, value) ->
                 Log.d(TAG, "  $key: $value")
             }
         }
 
         // Notify callback
-        onGoogleConsentChangedCallback?.invoke(googleConsents)
+        onGoogleConsentChangedCallback?.invoke(parseGoogleConsents(googleConsentsJson))
+    }
+
+    private fun parseGoogleConsents(googleConsentsJson: String?): Map<String, Boolean> {
+        if (googleConsentsJson.isNullOrBlank()) {
+            return emptyMap()
+        }
+
+        return try {
+            val json = JSONObject(googleConsentsJson)
+            val keys = json.keys()
+            val parsed = mutableMapOf<String, Boolean>()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                parsed[key] = json.optBoolean(key)
+            }
+            parsed
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse Google consents JSON", e)
+            emptyMap()
+        }
     }
 }

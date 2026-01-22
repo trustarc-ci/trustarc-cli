@@ -1,4 +1,5 @@
-import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
+import { NativeModules, NativeEventEmitter } from 'react-native';
+import { SdkMode, TrustArcSdk } from '@trustarc/trustarc-react-native-consent-sdk';
 
 const { TrustArcMobileSdk } = NativeModules;
 
@@ -26,6 +27,7 @@ const { TrustArcMobileSdk } = NativeModules;
 class TrustArcConsentImpl {
   private static instance: TrustArcConsentImpl;
   private eventEmitter: NativeEventEmitter;
+  private trustArcSdk: TrustArcSdk;
   private consentChangeListeners: Array<(data: any) => void> = [];
   private googleConsentChangeListeners: Array<(data: any) => void> = [];
   private sdkInitListeners: Array<() => void> = [];
@@ -36,6 +38,8 @@ class TrustArcConsentImpl {
   private readonly DOMAIN = '__TRUSTARC_DOMAIN_PLACEHOLDER__';
   private readonly IP_ADDRESS = ''; // Optional: set user IP for GDPR detection
   private readonly LANGUAGE = 'en'; // Optional: set language code
+  private readonly SDK_MODE = SdkMode.standard;
+  private readonly USE_GDPR_DETECTION = true;
   private readonly ENABLE_DEBUG_LOGS = true;
 
   private constructor() {
@@ -45,6 +49,7 @@ class TrustArcConsentImpl {
       );
     }
 
+    this.trustArcSdk = new TrustArcSdk();
     this.eventEmitter = new NativeEventEmitter(TrustArcMobileSdk);
     this.setupEventListeners();
   }
@@ -102,13 +107,20 @@ class TrustArcConsentImpl {
     }
 
     try {
+      const alreadyInitialized = await this.trustArcSdk.isSdkInitialized();
+      if (alreadyInitialized) {
+        this.isInitialized = true;
+        this.isReady = true;
+        this.sdkInitListeners.forEach((listener) => listener());
+        return;
+      }
+
       console.log(`[TrustArc] Initializing SDK with domain: ${this.DOMAIN}`);
 
-      // Initialize the native SDK
-      await TrustArcMobileSdk.initialize();
-
-      // Start the SDK with configuration
-      await TrustArcMobileSdk.start(this.DOMAIN, this.IP_ADDRESS, this.LANGUAGE);
+      await this.trustArcSdk.enableDebugLog(this.ENABLE_DEBUG_LOGS);
+      await this.trustArcSdk.initialize(this.SDK_MODE);
+      await this.trustArcSdk.useGdprDetection(this.USE_GDPR_DETECTION);
+      await this.trustArcSdk.start(this.DOMAIN, this.IP_ADDRESS, this.LANGUAGE);
 
       this.isInitialized = true;
       console.log('[TrustArc] SDK initialized successfully');
@@ -134,7 +146,7 @@ class TrustArcConsentImpl {
 
     try {
       console.log('[TrustArc] Opening consent management dialog');
-      await TrustArcMobileSdk.openCM();
+      await this.trustArcSdk.openCM();
     } catch (error) {
       console.error('[TrustArc] Failed to open consent dialog:', error);
       throw error;
@@ -152,8 +164,14 @@ class TrustArcConsentImpl {
     }
 
     try {
-      const consentData = await TrustArcMobileSdk.getConsentDataByCategory();
-      return consentData || {};
+      const consentData = await this.trustArcSdk.getConsentDataByCategory();
+      if (!consentData) {
+        return {};
+      }
+      if (typeof consentData === 'string') {
+        return JSON.parse(consentData || '{}');
+      }
+      return consentData as Record<string, any>;
     } catch (error) {
       console.error('[TrustArc] Failed to get consent data:', error);
       return {};
@@ -172,7 +190,7 @@ class TrustArcConsentImpl {
     }
 
     try {
-      return await TrustArcMobileSdk.getConsentValue(trackerId);
+      return await this.trustArcSdk.getConsentValue(trackerId);
     } catch (error) {
       console.error(`[TrustArc] Failed to get consent value for tracker ${trackerId}:`, error);
       return null;
@@ -191,7 +209,7 @@ class TrustArcConsentImpl {
     }
 
     try {
-      return await TrustArcMobileSdk.getTcfString();
+      return await this.trustArcSdk.getTcfString();
     } catch (error) {
       console.error('[TrustArc] Failed to get TCF string:', error);
       return null;
@@ -209,8 +227,14 @@ class TrustArcConsentImpl {
     }
 
     try {
-      const googleConsents = await TrustArcMobileSdk.getGoogleConsents();
-      return googleConsents || {};
+      const googleConsents = await this.trustArcSdk.getGoogleConsents();
+      if (!googleConsents) {
+        return {};
+      }
+      if (typeof googleConsents === 'string') {
+        return JSON.parse(googleConsents || '{}');
+      }
+      return googleConsents as Record<string, any>;
     } catch (error) {
       console.error('[TrustArc] Failed to get Google consents:', error);
       return {};
@@ -228,7 +252,7 @@ class TrustArcConsentImpl {
     }
 
     try {
-      return await TrustArcMobileSdk.getWebScript();
+      return await this.trustArcSdk.getWebScript();
     } catch (error) {
       console.error('[TrustArc] Failed to get web script:', error);
       return null;
@@ -236,22 +260,99 @@ class TrustArcConsentImpl {
   }
 
   /**
-   * Get shared preferences data
-   * Platform-specific consent storage
+   * Check if a consent category is granted by index
    *
-   * @returns Promise<Record<string, any>> Shared preferences data
+   * @param categoryIndex Consent category index
+   * @returns Promise<boolean> true if consented
    */
-  public async getSharedPreferences(): Promise<Record<string, any>> {
+  public async isCategoryConsented(categoryIndex: number): Promise<boolean> {
     if (!this.isInitialized) {
       throw new Error('TrustArc not initialized. Call initialize() first');
     }
 
     try {
-      const preferences = await TrustArcMobileSdk.getSharedPreferences();
-      return preferences || {};
+      return await this.trustArcSdk.isCategoryConsented(categoryIndex);
     } catch (error) {
-      console.error('[TrustArc] Failed to get shared preferences:', error);
+      console.error('[TrustArc] Failed to check category consent:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get consent details for a category index
+   *
+   * @param categoryIndex Consent category index
+   * @returns Promise<Record<string, any> | null> Consent details
+   */
+  public async getCategoryConsent(
+    categoryIndex: number
+  ): Promise<Record<string, any> | null> {
+    if (!this.isInitialized) {
+      throw new Error('TrustArc not initialized. Call initialize() first');
+    }
+
+    try {
+      const categoryConsent = await this.trustArcSdk.getCategoryConsent(categoryIndex);
+      if (!categoryConsent) {
+        return null;
+      }
+      if (typeof categoryConsent === 'string') {
+        return JSON.parse(categoryConsent || '{}');
+      }
+      return categoryConsent as Record<string, any>;
+    } catch (error) {
+      console.error('[TrustArc] Failed to get category consent:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get stored consent data (SDK persistence)
+   *
+   * @returns Promise<Record<string, any>> Stored consent data
+   */
+  public async getStoredConsentData(): Promise<Record<string, any>> {
+    if (!this.isInitialized) {
+      throw new Error('TrustArc not initialized. Call initialize() first');
+    }
+
+    try {
+      const storedConsent = await this.trustArcSdk.getStoredConsentData();
+      if (!storedConsent) {
+        return {};
+      }
+      if (typeof storedConsent === 'string') {
+        return JSON.parse(storedConsent || '{}');
+      }
+      return storedConsent as Record<string, any>;
+    } catch (error) {
+      console.error('[TrustArc] Failed to get stored consent data:', error);
       return {};
+    }
+  }
+
+  /**
+   * Get IAB TCF preferences
+   *
+   * @returns Promise<Record<string, any> | string | null> IAB preferences payload
+   */
+  public async getIABTCFPreferences(): Promise<Record<string, any> | string | null> {
+    if (!this.isInitialized) {
+      throw new Error('TrustArc not initialized. Call initialize() first');
+    }
+
+    try {
+      const iabPrefs = await this.trustArcSdk.getIABTCFPreferences();
+      if (!iabPrefs) {
+        return null;
+      }
+      if (typeof iabPrefs === 'string') {
+        return JSON.parse(iabPrefs || '{}');
+      }
+      return iabPrefs as Record<string, any>;
+    } catch (error) {
+      console.error('[TrustArc] Failed to get IAB TCF preferences:', error);
+      return null;
     }
   }
 

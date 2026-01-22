@@ -17,8 +17,6 @@ REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/h
 DEFAULT_MODEL_KEY="llama-3.2-3b"
 MODEL_OPTIONS=(
     "llama-3.2-3b|Llama-3.2-3B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf|~2.2 GB|[recommended] Public download"
-    "llama-3.1-8b|Llama-3.1-8B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.1-8B-Instruct-GGUF/resolve/main/Llama-3.1-8B-Instruct-Q4_K_M.gguf|~5.5 GB|Requires Hugging Face auth"
-    "llama-3.2-1b|Llama-3.2-1B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf|~0.7 GB|[fast] Smallest footprint"
 )
 
 # Selected model metadata (populated by choose_ai_model)
