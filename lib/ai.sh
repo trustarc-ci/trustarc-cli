@@ -14,11 +14,11 @@ PROJECT_SCAN_ENABLED="$AI_DIR/.scan-enabled"
 REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/testing"
 
 # Model options (name|url|size|note)
-DEFAULT_MODEL_KEY="llama-3.1-8b"
+DEFAULT_MODEL_KEY="llama-3.2-3b"
 MODEL_OPTIONS=(
-    "llama-3.1-8b|Llama-3.1-8B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.1-8B-Instruct-GGUF/resolve/main/Llama-3.1-8B-Instruct-Q4_K_M.gguf|~5.5 GB|[recommended] Balanced accuracy vs. size"
-    "llama-3.2-3b|Llama-3.2-3B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf|~2.2 GB|Faster, good quality"
-    "llama-3.2-1b|Llama-3.2-1B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf|~0.7 GB|[not accurate but fast] Smallest footprint"
+    "llama-3.2-3b|Llama-3.2-3B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf|~2.2 GB|[recommended] Public download"
+    "llama-3.1-8b|Llama-3.1-8B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.1-8B-Instruct-GGUF/resolve/main/Llama-3.1-8B-Instruct-Q4_K_M.gguf|~5.5 GB|Requires Hugging Face auth"
+    "llama-3.2-1b|Llama-3.2-1B-Instruct-Q4_K_M.gguf|https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf|~0.7 GB|[fast] Smallest footprint"
 )
 
 # Selected model metadata (populated by choose_ai_model)
@@ -84,7 +84,7 @@ choose_ai_model() {
     print_header "AI Model Selection"
     echo ""
     print_info "Pick a model to balance speed vs. accuracy"
-    print_info "Recommended: Llama 3.1 8B Instruct (better grounding)"
+    print_info "Recommended: Llama 3.2 3B Instruct (public download)"
     echo ""
 
     local idx=1
