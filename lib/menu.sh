@@ -54,6 +54,7 @@ cleanup_trustarc() {
     echo ""
     print_substep "TRUSTARC_TOKEN from your shell configuration"
     print_substep "Configuration file: $CONFIG_FILE"
+    print_substep "GitHub credentials we added in ~/.netrc (only our entry; deletes file if it was the only machine)"
     echo ""
     print_warning "This action cannot be undone"
     echo ""
