@@ -91,9 +91,13 @@ add_trustarc_to_pubspec() {
         if [ -n "$TRUSTARC_TOKEN" ]; then
             git_url="https://${TRUSTARC_TOKEN}@github.com/trustarc/trustarc-mobile-consent.git"
             print_warning "Using token-embedded Git URL for Flutter because .netrc update was skipped."
+            print_substep "Git URL: $git_url"
         else
             print_warning "TRUSTARC_SKIP_NETRC set but TRUSTARC_TOKEN is empty; keeping default URL (may fail without .netrc)."
+            print_substep "Git URL: $git_url"
         fi
+    else
+        print_substep "Git URL: $git_url (expects credentials via ~/.netrc)"
     fi
 
     # Create the dependency entry (using HTTPS - either .netrc or embedded token)

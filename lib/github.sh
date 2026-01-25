@@ -112,6 +112,7 @@ save_to_netrc() {
     # If .netrc already exists, confirm before touching it
     if [ -f "$netrc_file" ]; then
         print_warning "Existing $netrc_file detected"
+        print_substep "Used only for Flutter pubspec git dependency; other platforms don't need it."
         print_substep "A backup will be written to ${netrc_file}.backup if you continue."
         read -p "Update $netrc_file with TrustArc GitHub token (may replace github.com entry)? (y/n): " update_netrc
         if [ "$update_netrc" != "y" ] && [ "$update_netrc" != "Y" ]; then
@@ -126,6 +127,7 @@ save_to_netrc() {
     # Backup existing .netrc if it exists
     if [ -f "$netrc_file" ]; then
         cp "$netrc_file" "$netrc_file.backup"
+        print_substep "Backup created: ${netrc_file}.backup"
         # Remove existing github.com entry
         sed -i.tmp '/^machine github\.com$/,/^$/d' "$netrc_file" 2>/dev/null || true
         rm -f "$netrc_file.tmp"
