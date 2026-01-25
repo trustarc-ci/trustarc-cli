@@ -171,6 +171,20 @@ cleanup_trustarc() {
         print_info "No .netrc file found"
     fi
 
+    # Offer to restore previous .netrc from backup if it exists
+    local netrc_backup="$netrc_file.backup"
+    if [ -f "$netrc_backup" ]; then
+        echo ""
+        read -p "Restore previous .netrc from backup at $netrc_backup? (y/n): " restore_netrc
+        if [ "$restore_netrc" = "y" ] || [ "$restore_netrc" = "Y" ]; then
+            cp "$netrc_backup" "$netrc_file"
+            chmod 600 "$netrc_file" 2>/dev/null || true
+            print_success "Restored $netrc_file from backup"
+        else
+            print_info "Left backup untouched at $netrc_backup"
+        fi
+    fi
+
     echo ""
     print_success "Cleanup completed"
     echo ""

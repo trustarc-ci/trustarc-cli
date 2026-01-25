@@ -112,6 +112,7 @@ save_to_netrc() {
     # If .netrc already exists, confirm before touching it
     if [ -f "$netrc_file" ]; then
         print_warning "Existing $netrc_file detected"
+        print_substep "A backup will be written to ${netrc_file}.backup if you continue."
         read -p "Update $netrc_file with TrustArc GitHub token (may replace github.com entry)? (y/n): " update_netrc
         if [ "$update_netrc" != "y" ] && [ "$update_netrc" != "Y" ]; then
             print_info "Skipping .netrc update; GitHub auth will rely on embedded URLs for Flutter."
