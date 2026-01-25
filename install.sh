@@ -72,7 +72,6 @@ load_module "ios"
 load_module "android"
 load_module "react"
 load_module "flutter"
-load_module "ai"
 load_module "menu"
 
 # Main installation flow

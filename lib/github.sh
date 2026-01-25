@@ -109,6 +109,17 @@ save_to_netrc() {
     local token=$1
     local netrc_file="$HOME/.netrc"
 
+    # If .netrc already exists, confirm before touching it
+    if [ -f "$netrc_file" ]; then
+        print_warning "Existing $netrc_file detected"
+        read -p "Update $netrc_file with TrustArc GitHub token (may replace github.com entry)? (y/n): " update_netrc
+        if [ "$update_netrc" != "y" ] && [ "$update_netrc" != "Y" ]; then
+            print_info "Skipping .netrc update; GitHub auth will rely on embedded URLs for Flutter."
+            export TRUSTARC_SKIP_NETRC=1
+            return 0
+        fi
+    fi
+
     print_info "Configuring .netrc for Git authentication..."
 
     # Backup existing .netrc if it exists
@@ -123,7 +134,7 @@ save_to_netrc() {
     cat >> "$netrc_file" << EOF
 
 machine github.com
-login token
+login trustarc-ci
 password $token
 EOF
 
