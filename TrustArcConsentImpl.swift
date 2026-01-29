@@ -232,6 +232,47 @@ class TrustArcConsentImpl: ObservableObject {
     }
 
     /**
+     * Get IAB TCF string
+     *
+     * Returns the current IAB TCF consent string if available.
+     */
+    func getTcfString() -> String? {
+        return TrustArc.sharedInstance.getTcfString()
+    }
+
+    /**
+     * Get Google consent mappings
+     *
+     * Returns Google consent mappings as a JSON string.
+     */
+    func getGoogleConsents() -> String? {
+        return TrustArc.sharedInstance.getGoogleConsents()
+    }
+
+    /**
+     * Get TrustArc WebScript for WebView injection
+     *
+     * Returns an empty string when WebScript is unavailable.
+     */
+    func getWebScript() -> String {
+        return TrustArc.sharedInstance.getWebScript()
+    }
+
+    /**
+     * Check if a consent category is granted by index
+     */
+    func isCategoryConsented(_ categoryIndex: Int) -> Bool {
+        return TrustArc.sharedInstance.isCategoryConsented(categoryIndex: categoryIndex)
+    }
+
+    /**
+     * Get consent details for a category index
+     */
+    func getCategoryConsent(_ categoryIndex: Int) -> TACategoryConsent? {
+        return TrustArc.sharedInstance.getCategoryConsent(categoryIndex: categoryIndex)
+    }
+
+    /**
      * Check if user has consented to a specific category
      *
      * Convenience method to check if the user has granted consent for a specific

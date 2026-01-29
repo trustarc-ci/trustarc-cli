@@ -11,7 +11,8 @@ rm -rf /tmp/trustarc-cli-lib-* 2>/dev/null || true
 rm -rf /tmp/trustarc-boilerplate-* 2>/dev/null || true
 
 # GitHub repository base URL for raw content
-REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main"
+REPO_REF="${TRUSTARC_REF:-main}"
+REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/${REPO_REF}"
 
 # Temporary directory for downloaded modules
 TMP_LIB_DIR="/tmp/trustarc-cli-lib-$$"
@@ -20,7 +21,9 @@ TMP_LIB_DIR="/tmp/trustarc-cli-lib-$$"
 load_module() {
     local module_name=$1
     local module_path="lib/${module_name}.sh"
-    local module_url="${REPO_BASE_URL}/${module_path}"
+    local cache_buster
+    cache_buster=$(date +%s%N)
+    local module_url="${REPO_BASE_URL}/${module_path}?cb=${cache_buster}"
 
     # Check if running from local git repo first
     if [ -f "$(dirname "$0")/${module_path}" ]; then
@@ -35,9 +38,9 @@ load_module() {
     local local_module="$TMP_LIB_DIR/${module_name}.sh"
 
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$module_url" -o "$local_module" 2>/dev/null
+        curl -fsSL -H "Cache-Control: no-cache" -H "Pragma: no-cache" "$module_url" -o "$local_module" 2>/dev/null
     elif command -v wget >/dev/null 2>&1; then
-        wget -q "$module_url" -O "$local_module" 2>/dev/null
+        wget -q --header="Cache-Control: no-cache" --header="Pragma: no-cache" "$module_url" -O "$local_module" 2>/dev/null
     else
         echo "Error: Neither curl nor wget is available. Please install one of them."
         exit 1
@@ -71,7 +74,6 @@ load_module "ios"
 load_module "android"
 load_module "react"
 load_module "flutter"
-load_module "ai"
 load_module "menu"
 
 # Main installation flow

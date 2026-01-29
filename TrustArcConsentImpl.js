@@ -36,6 +36,8 @@ class TrustArcConsentImpl {
     this.DOMAIN = 'mac_trustarc.com';
     this.IP_ADDRESS = ''; // Optional: set user IP for GDPR detection
     this.LANGUAGE = 'en'; // Optional: set language code
+    this.SDK_MODE = SdkMode.standard;
+    this.USE_GDPR_DETECTION = true;
     this.ENABLE_DEBUG_LOGS = true;
 
     // Only initialize SDK components if native module is available
@@ -108,14 +110,23 @@ class TrustArcConsentImpl {
     }
 
     try {
+      const alreadyInitialized = await this.trustArcSdk.isSdkInitialized();
+      if (alreadyInitialized) {
+        this.isInitialized = true;
+        this.isReady = true;
+        this.sdkInitListeners.forEach((listener) => listener());
+        return;
+      }
+
       console.log(`[TrustArc] Initializing SDK with domain: ${this.DOMAIN}`);
 
       await this.trustArcSdk.enableDebugLog(this.ENABLE_DEBUG_LOGS);
 
       // Initialize the native SDK
-      await this.trustArcSdk.initialize(SdkMode.standard);
+      await this.trustArcSdk.initialize(this.SDK_MODE);
 
       // Start the SDK with configuration
+      await this.trustArcSdk.useGdprDetection(this.USE_GDPR_DETECTION);
       await this.trustArcSdk.start(this.DOMAIN, this.IP_ADDRESS, this.LANGUAGE);
 
       this.isInitialized = true;
@@ -161,7 +172,13 @@ class TrustArcConsentImpl {
 
     try {
       const consentData = await this.trustArcSdk.getConsentDataByCategory();
-      return consentData || {};
+      if (!consentData) {
+        return {};
+      }
+      if (typeof consentData === 'string') {
+        return JSON.parse(consentData || '{}');
+      }
+      return consentData;
     } catch (error) {
       console.error('[TrustArc] Failed to get consent data:', error);
       return {};
@@ -218,7 +235,13 @@ class TrustArcConsentImpl {
 
     try {
       const googleConsents = await this.trustArcSdk.getGoogleConsents();
-      return googleConsents || {};
+      if (!googleConsents) {
+        return {};
+      }
+      if (typeof googleConsents === 'string') {
+        return JSON.parse(googleConsents || '{}');
+      }
+      return googleConsents;
     } catch (error) {
       console.error('[TrustArc] Failed to get Google consents:', error);
       return {};
@@ -244,22 +267,97 @@ class TrustArcConsentImpl {
   }
 
   /**
-   * Get shared preferences data
-   * Platform-specific consent storage
+   * Check if a consent category is granted by index
    *
-   * @returns Promise<Object> Shared preferences data
+   * @param {number} categoryIndex Consent category index
+   * @returns Promise<boolean> true if consented
    */
-  async getSharedPreferences() {
+  async isCategoryConsented(categoryIndex) {
     if (!this.isInitialized) {
       throw new Error('TrustArc not initialized. Call initialize() first');
     }
 
     try {
-      const preferences = await this.trustArcSdk.getSharedPreferences();
-      return preferences || {};
+      return await this.trustArcSdk.isCategoryConsented(categoryIndex);
     } catch (error) {
-      console.error('[TrustArc] Failed to get shared preferences:', error);
+      console.error('[TrustArc] Failed to check category consent:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get consent details for a category index
+   *
+   * @param {number} categoryIndex Consent category index
+   * @returns Promise<Object | null> Consent details
+   */
+  async getCategoryConsent(categoryIndex) {
+    if (!this.isInitialized) {
+      throw new Error('TrustArc not initialized. Call initialize() first');
+    }
+
+    try {
+      const categoryConsent = await this.trustArcSdk.getCategoryConsent(categoryIndex);
+      if (!categoryConsent) {
+        return null;
+      }
+      if (typeof categoryConsent === 'string') {
+        return JSON.parse(categoryConsent || '{}');
+      }
+      return categoryConsent;
+    } catch (error) {
+      console.error('[TrustArc] Failed to get category consent:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get stored consent data (SDK persistence)
+   *
+   * @returns Promise<Object> Stored consent data
+   */
+  async getStoredConsentData() {
+    if (!this.isInitialized) {
+      throw new Error('TrustArc not initialized. Call initialize() first');
+    }
+
+    try {
+      const storedConsent = await this.trustArcSdk.getStoredConsentData();
+      if (!storedConsent) {
+        return {};
+      }
+      if (typeof storedConsent === 'string') {
+        return JSON.parse(storedConsent || '{}');
+      }
+      return storedConsent;
+    } catch (error) {
+      console.error('[TrustArc] Failed to get stored consent data:', error);
       return {};
+    }
+  }
+
+  /**
+   * Get IAB TCF preferences
+   *
+   * @returns Promise<Object | string | null> IAB preferences payload
+   */
+  async getIABTCFPreferences() {
+    if (!this.isInitialized) {
+      throw new Error('TrustArc not initialized. Call initialize() first');
+    }
+
+    try {
+      const iabPrefs = await this.trustArcSdk.getIABTCFPreferences();
+      if (!iabPrefs) {
+        return null;
+      }
+      if (typeof iabPrefs === 'string') {
+        return JSON.parse(iabPrefs || '{}');
+      }
+      return iabPrefs;
+    } catch (error) {
+      console.error('[TrustArc] Failed to get IAB TCF preferences:', error);
+      return null;
     }
   }
 

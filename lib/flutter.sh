@@ -85,10 +85,25 @@ add_trustarc_to_pubspec() {
         return 1
     fi
 
-    # Create the dependency entry (using HTTPS - authentication via .netrc)
+    # Decide git URL based on whether .netrc was skipped
+    local git_url="https://github.com/trustarc/trustarc-mobile-consent.git"
+    if [ "${TRUSTARC_SKIP_NETRC:-0}" = "1" ]; then
+        if [ -n "$TRUSTARC_TOKEN" ]; then
+            git_url="https://${TRUSTARC_TOKEN}@github.com/trustarc/trustarc-mobile-consent.git"
+            print_warning "Using token-embedded Git URL for Flutter because .netrc update was skipped."
+            print_substep "Git URL: $git_url"
+        else
+            print_warning "TRUSTARC_SKIP_NETRC set but TRUSTARC_TOKEN is empty; keeping default URL (may fail without .netrc)."
+            print_substep "Git URL: $git_url"
+        fi
+    else
+        print_substep "Git URL: $git_url (expects credentials via ~/.netrc)"
+    fi
+
+    # Create the dependency entry (using HTTPS - either .netrc or embedded token)
     local sdk_entry="  flutter_trustarc_mobile_consent_sdk:
     git:
-      url: https://github.com/trustarc/trustarc-mobile-consent.git
+      url: $git_url
       ref: $version
       path: flutter"
 

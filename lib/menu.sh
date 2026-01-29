@@ -17,11 +17,10 @@ show_main_menu() {
     printf "${BLUE}What would you like to do?${NC}\n\n"
     print_menu_option "1" "Integrate SDK into project"
     print_menu_option "2" "Download sample application"
-    print_menu_option "3" "AI Assistant (beta)"
-    print_menu_option "4" "Clean up (remove token and config)"
-    print_menu_option "5" "Exit"
+    print_menu_option "3" "Clean up (remove token and config)"
+    print_menu_option "4" "Exit"
     echo ""
-    read -p $'\033[0;34mEnter your choice (1-5): \033[0m' main_choice
+    read -p $'\033[0;34mEnter your choice (1-4): \033[0m' main_choice
 
     case "$main_choice" in
         1)
@@ -31,14 +30,9 @@ show_main_menu() {
             download_sample_menu
             ;;
         3)
-            show_ai_menu
-            echo ""
-            show_main_menu
-            ;;
-        4)
             cleanup_trustarc
             ;;
-        5)
+        4)
             echo ""
             print_info "Configuration saved to: $CONFIG_FILE"
             print_substep "Run option 4 to clean up when you no longer need it"
@@ -60,7 +54,7 @@ cleanup_trustarc() {
     echo ""
     print_substep "TRUSTARC_TOKEN from your shell configuration"
     print_substep "Configuration file: $CONFIG_FILE"
-    print_substep "AI Assistant files and models (~/.trustarc-cli/ai/)"
+    print_substep "GitHub credentials we added in ~/.netrc (only our entry; deletes file if it was the only machine)"
     echo ""
     print_warning "This action cannot be undone"
     echo ""
@@ -141,20 +135,54 @@ cleanup_trustarc() {
         print_info "No configuration file found at: $config_path"
     fi
 
-    # Remove AI assistant files
+    # Clean up .netrc GitHub entry (added during setup)
     echo ""
-    print_step "Removing AI Assistant files..."
-    local ai_dir="$HOME/.trustarc-cli/ai"
-    if [ -d "$ai_dir" ]; then
-        rm -rf "$ai_dir"
-        if [ -d "$ai_dir" ]; then
-            print_error "Failed to remove AI directory: $ai_dir"
+    print_step "Cleaning .netrc GitHub credentials..."
+    local netrc_file="$HOME/.netrc"
+
+    if [ -f "$netrc_file" ]; then
+        local machine_count
+        machine_count=$(grep -c "^machine " "$netrc_file" 2>/dev/null || true)
+
+        if grep -q "^machine github\\.com" "$netrc_file" 2>/dev/null; then
+            if [ "$machine_count" -eq 1 ]; then
+                rm -f "$netrc_file"
+                if [ -f "$netrc_file" ]; then
+                    print_error "Failed to remove $netrc_file"
+                else
+                    print_success "Removed $netrc_file (it only contained the GitHub entry)"
+                fi
+            else
+                # Remove only the GitHub block
+                sed -i.bak '/^machine github\\.com$/,/^$/d' "$netrc_file" 2>/dev/null || sed -i '/^machine github\\.com$/,/^$/d' "$netrc_file"
+
+                if [ ! -s "$netrc_file" ]; then
+                    rm -f "$netrc_file"
+                    print_substep "Removed empty $netrc_file after deleting GitHub entry"
+                else
+                    rm -f "$netrc_file.bak" 2>/dev/null
+                    print_success "Removed GitHub entry from $netrc_file"
+                fi
+            fi
         else
-            print_success "AI Assistant files removed: $ai_dir"
-            print_substep "Includes: models, knowledge base, and project scans"
+            print_info "No GitHub credentials found in $netrc_file"
         fi
     else
-        print_info "No AI files found at: $ai_dir"
+        print_info "No .netrc file found"
+    fi
+
+    # Offer to restore previous .netrc from backup if it exists
+    local netrc_backup="$netrc_file.backup"
+    if [ -f "$netrc_backup" ]; then
+        echo ""
+        read -p "Restore previous .netrc from backup at $netrc_backup? (y/n): " restore_netrc
+        if [ "$restore_netrc" = "y" ] || [ "$restore_netrc" = "Y" ]; then
+            cp "$netrc_backup" "$netrc_file"
+            chmod 600 "$netrc_file" 2>/dev/null || true
+            print_success "Restored $netrc_file from backup"
+        else
+            print_info "Left backup untouched at $netrc_backup"
+        fi
     fi
 
     echo ""
