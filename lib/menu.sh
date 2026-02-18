@@ -341,7 +341,22 @@ download_sample_menu() {
     echo "  ${BOLD}5${NC}) Flutter"
     echo "  ${BOLD}6${NC}) Back to main menu"
     echo ""
-    read -p "Enter your choice (1-6): " platform_choice
+
+    local default_platform_choice=""
+    case "$LAST_PLATFORM" in
+        ios) default_platform_choice="1" ;;
+        android) default_platform_choice="2" ;;
+        react-native) default_platform_choice="3" ;;
+        react-native-baremetal) default_platform_choice="4" ;;
+        flutter) default_platform_choice="5" ;;
+    esac
+
+    if [ -n "$default_platform_choice" ]; then
+        read -p "Enter your choice (1-6, default: $default_platform_choice): " platform_choice
+        platform_choice=${platform_choice:-$default_platform_choice}
+    else
+        read -p "Enter your choice (1-6): " platform_choice
+    fi
 
     local platform=""
     case "$platform_choice" in
