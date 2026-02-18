@@ -362,7 +362,15 @@ integrate_flutter_sdk() {
 
     local existing_version=$(flutter_check_trustarc_package "$project_path")
     local install_package=false
+    local default_target_version="release"
     local target_version="release"
+    local latest_tag
+    latest_tag=$(fetch_latest_mobile_consent_tag 2>/dev/null || true)
+    if [ -n "$latest_tag" ]; then
+        default_target_version="$latest_tag"
+        target_version="$latest_tag"
+        print_info "Latest repository tag detected: $latest_tag"
+    fi
 
     if [ -n "$existing_version" ]; then
         echo ""
@@ -373,8 +381,8 @@ integrate_flutter_sdk() {
 
         if [ "$update_choice" = "y" ] || [ "$update_choice" = "Y" ]; then
             echo ""
-            read -p "Enter version/ref (default: release): " target_version
-            target_version=${target_version:-release}
+            read -p "Enter version/ref (default: $default_target_version): " target_version
+            target_version=${target_version:-$default_target_version}
             install_package=true
         fi
     else
@@ -385,8 +393,8 @@ integrate_flutter_sdk() {
 
         if [ "$add_choice" = "y" ] || [ "$add_choice" = "Y" ]; then
             echo ""
-            read -p "Enter version/ref (default: release): " target_version
-            target_version=${target_version:-release}
+            read -p "Enter version/ref (default: $default_target_version): " target_version
+            target_version=${target_version:-$default_target_version}
             install_package=true
         else
             print_info "Integration cancelled"
@@ -435,9 +443,10 @@ integrate_flutter_sdk() {
             read -p "Enter your TrustArc domain (default: $MAC_DOMAIN): " domain
             domain=${domain:-$MAC_DOMAIN}
         else
-            read -p "Enter your TrustArc domain (default: mac_trustarc.com): " domain
-            domain=${domain:-mac_trustarc.com}
+            read -p "Enter your TrustArc domain (default: https://trustarc.com): " domain
+            domain=${domain:-https://trustarc.com}
         fi
+        domain=$(normalize_https_url "$domain")
         save_config "MAC_DOMAIN" "$domain"
 
         create_flutter_boilerplate "$project_path" "$domain"

@@ -79,7 +79,7 @@ load_module "menu"
 # Main installation flow
 main() {
     clear
-    print_header "TrustArc Mobile Consent SDK Installer 0.1-alpha"
+    print_header "TrustArc Mobile Consent SDK Configurator 1.2"
 
     # Load existing config
     load_config
@@ -125,6 +125,12 @@ main() {
 
     # Step 3: Save token
     if [ "$TRUSTARC_TOKEN" != "$github_token" ]; then
+        echo ""
+        print_info "What happens next:"
+        print_substep "Update your shell config with the new TRUSTARC_TOKEN (replaces older TrustArc token entries)"
+        print_substep "Save TRUSTARC_TOKEN to $CONFIG_FILE for future installer runs"
+        print_substep "Prompt you to optionally configure ~/.netrc for Flutter git authentication"
+        print_substep "Set TRUSTARC_TOKEN in this current installer session"
         echo ""
         print_step "Saving token to environment variable"
         echo ""

@@ -116,9 +116,10 @@ integrate_ios_sdk() {
         read -p "Enter your TrustArc domain (default: $MAC_DOMAIN): " domain
         domain=${domain:-$MAC_DOMAIN}
     else
-        read -p "Enter your TrustArc domain (default: mac_trustarc.com): " domain
-        domain=${domain:-mac_trustarc.com}
+        read -p "Enter your TrustArc domain (default: https://trustarc.com): " domain
+        domain=${domain:-https://trustarc.com}
     fi
+    domain=$(normalize_https_url "$domain")
     save_config "MAC_DOMAIN" "$domain"
 
     # Show integration summary
@@ -226,10 +227,18 @@ integrate_ios_cocoapods() {
         return 1
     fi
 
-    # Ask for branch
+    # Ask for branch/tag (prefill with latest tag when available)
+    local default_branch_name="release"
+    local latest_tag
+    latest_tag=$(fetch_latest_mobile_consent_tag 2>/dev/null || true)
+    if [ -n "$latest_tag" ]; then
+        default_branch_name="$latest_tag"
+        print_info "Latest repository tag detected: $latest_tag"
+    fi
+
     echo ""
-    read -p "Which branch/tag should be used? (default: release): " branch_name
-    branch_name=${branch_name:-release}
+    read -p "Which branch/tag should be used? (default: $default_branch_name): " branch_name
+    branch_name=${branch_name:-$default_branch_name}
 
     # Backup Podfile
     cp "$podfile" "$podfile.backup"
@@ -290,10 +299,18 @@ integrate_ios_spm() {
     # Get the repository URL (authentication via .netrc)
     local repo_url="https://github.com/trustarc/trustarc-mobile-consent.git"
 
-    # Ask which branch to use
+    # Ask which branch/tag to use (prefill with latest tag when available)
+    local default_branch_name="release"
+    local latest_tag
+    latest_tag=$(fetch_latest_mobile_consent_tag 2>/dev/null || true)
+    if [ -n "$latest_tag" ]; then
+        default_branch_name="$latest_tag"
+        print_info "Latest repository tag detected: $latest_tag"
+    fi
+
     echo ""
-    read -p "Which branch should be used? (default: release): " branch_name
-    branch_name=${branch_name:-release}
+    read -p "Which branch/tag should be used? (default: $default_branch_name): " branch_name
+    branch_name=${branch_name:-$default_branch_name}
 
     echo ""
     print_step "Adding TrustArc SDK via Swift Package Manager"

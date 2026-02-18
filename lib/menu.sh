@@ -12,7 +12,7 @@ print_menu_option() {
 
 # Main menu
 show_main_menu() {
-    print_header "TrustArc Mobile Consent SDK 0.1-alpha"
+    print_header "TrustArc Mobile Consent SDK 1.2"
 
     printf "${BLUE}What would you like to do?${NC}\n\n"
     print_menu_option "1" "Integrate SDK into project"
@@ -105,11 +105,16 @@ cleanup_trustarc() {
         # Create backup
         cp "$shell_rc" "$shell_rc.trustarc-backup"
 
-        # Remove the token lines
+        # Remove all known TrustArc token formats
         if grep -q "TRUSTARC_TOKEN" "$shell_rc"; then
-            # Remove the comment line and export line
+            # Remove managed block format
+            sed -i.bak '/^# >>> TrustArc GitHub Token >>>$/,/^# <<< TrustArc GitHub Token <<<$/d' "$shell_rc" 2>/dev/null || \
+                sed -i '/^# >>> TrustArc GitHub Token >>>$/,/^# <<< TrustArc GitHub Token <<<$/d' "$shell_rc"
+
+            # Remove legacy comment/export lines
             sed -i.bak '/# TrustArc GitHub Token/d' "$shell_rc" 2>/dev/null || sed -i '/# TrustArc GitHub Token/d' "$shell_rc"
-            sed -i.bak '/export TRUSTARC_TOKEN/d' "$shell_rc" 2>/dev/null || sed -i '/export TRUSTARC_TOKEN/d' "$shell_rc"
+            sed -i.bak '/^[[:space:]]*export[[:space:]]\+TRUSTARC_TOKEN=/d' "$shell_rc" 2>/dev/null || \
+                sed -i '/^[[:space:]]*export[[:space:]]\+TRUSTARC_TOKEN=/d' "$shell_rc"
             # Remove backup file created by sed
             rm -f "$shell_rc.bak"
             print_success "Token removed from $shell_rc"
@@ -153,14 +158,27 @@ cleanup_trustarc() {
                     print_success "Removed $netrc_file (it only contained the GitHub entry)"
                 fi
             else
-                # Remove only the GitHub block
-                sed -i.bak '/^machine github\\.com$/,/^$/d' "$netrc_file" 2>/dev/null || sed -i '/^machine github\\.com$/,/^$/d' "$netrc_file"
+                # Remove only the GitHub block, preserving all other machine entries.
+                awk '
+BEGIN {
+    in_github = 0
+}
+/^[[:space:]]*machine[[:space:]]+github\.com([[:space:]].*)?$/ {
+    in_github = 1
+    next
+}
+/^[[:space:]]*machine[[:space:]]+/ {
+    in_github = 0
+}
+{
+    if (!in_github) print
+}
+' "$netrc_file" > "${netrc_file}.tmp" && mv "${netrc_file}.tmp" "$netrc_file"
 
                 if [ ! -s "$netrc_file" ]; then
                     rm -f "$netrc_file"
                     print_substep "Removed empty $netrc_file after deleting GitHub entry"
                 else
-                    rm -f "$netrc_file.bak" 2>/dev/null
                     print_success "Removed GitHub entry from $netrc_file"
                 fi
             fi
@@ -362,9 +380,10 @@ download_sample_menu() {
         read -p "Enter MAC Domain (default: $MAC_DOMAIN): " domain
         domain=${domain:-$MAC_DOMAIN}
     else
-        read -p "Enter MAC Domain (default: mac_trustarc.com): " domain
-        domain=${domain:-mac_trustarc.com}
+        read -p "Enter MAC Domain (default: https://trustarc.com): " domain
+        domain=${domain:-https://trustarc.com}
     fi
+    domain=$(normalize_https_url "$domain")
     save_config "MAC_DOMAIN" "$domain"
 
     # Ask for website
@@ -373,9 +392,10 @@ download_sample_menu() {
         read -p "Enter website to load (default: $WEBSITE): " website
         website=${website:-$WEBSITE}
     else
-        read -p "Enter website to load (default: trustarc.com): " website
-        website=${website:-trustarc.com}
+        read -p "Enter website to load (default: https://trustarc.com): " website
+        website=${website:-https://trustarc.com}
     fi
+    website=$(normalize_https_url "$website")
     save_config "WEBSITE" "$website"
 
     # Download

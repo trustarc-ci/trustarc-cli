@@ -1043,9 +1043,10 @@ integrate_android_sdk() {
         read -p "Enter your TrustArc domain (default: $MAC_DOMAIN): " domain
         domain=${domain:-$MAC_DOMAIN}
     else
-        read -p "Enter your TrustArc domain (default: mac_trustarc.com): " domain
-        domain=${domain:-mac_trustarc.com}
+        read -p "Enter your TrustArc domain (default: https://trustarc.com): " domain
+        domain=${domain:-https://trustarc.com}
     fi
+    domain=$(normalize_https_url "$domain")
     save_config "MAC_DOMAIN" "$domain"
 
     # Find build.gradle files
@@ -1137,9 +1138,17 @@ integrate_android_sdk() {
         print_info "Adding TrustArc dependency to app/build.gradle..."
 
         # Ask for version
+        local default_sdk_version="+"
+        local latest_android_version
+        latest_android_version=$(fetch_latest_android_sdk_version 2>/dev/null || true)
+        if [ -n "$latest_android_version" ]; then
+            default_sdk_version="$latest_android_version"
+            print_info "Latest Android SDK version detected: $latest_android_version"
+        fi
+
         echo ""
-        read -p "Which version should be used? (default: + for latest): " sdk_version
-        sdk_version=${sdk_version:-+}
+        read -p "Which version should be used? (default: $default_sdk_version): " sdk_version
+        sdk_version=${sdk_version:-$default_sdk_version}
 
         if [ "$use_version_catalog" = true ]; then
             # Add to version catalog
@@ -1203,4 +1212,3 @@ integrate_android_sdk() {
 
     return 0
 }
-

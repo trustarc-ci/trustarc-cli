@@ -91,3 +91,30 @@ load_config() {
         source "$CONFIG_FILE"
     fi
 }
+
+# Normalize user-entered domain/website values.
+# Adds https:// when no scheme is provided.
+normalize_https_url() {
+    local value="$1"
+
+    # Trim leading/trailing whitespace
+    value=$(printf "%s" "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+    if [ -z "$value" ]; then
+        echo ""
+        return 0
+    fi
+
+    case "$value" in
+        http://*|https://*)
+            echo "$value"
+            ;;
+        *://*)
+            # Preserve non-http schemes if explicitly provided.
+            echo "$value"
+            ;;
+        *)
+            echo "https://$value"
+            ;;
+    esac
+}

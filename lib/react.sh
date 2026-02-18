@@ -657,7 +657,15 @@ integrate_react_native_sdk() {
 
     local existing_version=$(react_check_trustarc_package "$project_path")
     local install_package=false
+    local default_target_version="latest"
     local target_version="latest"
+    local latest_npm_version
+    latest_npm_version=$(fetch_latest_react_native_sdk_version 2>/dev/null || true)
+    if [ -n "$latest_npm_version" ]; then
+        default_target_version="$latest_npm_version"
+        target_version="$latest_npm_version"
+        print_info "Latest package version detected: $latest_npm_version"
+    fi
 
     if [ -n "$existing_version" ]; then
         echo ""
@@ -668,8 +676,8 @@ integrate_react_native_sdk() {
 
         if [ "$update_choice" = "y" ] || [ "$update_choice" = "Y" ]; then
             echo ""
-            read -p "Enter version (default: latest): " target_version
-            target_version=${target_version:-latest}
+            read -p "Enter version (default: $default_target_version): " target_version
+            target_version=${target_version:-$default_target_version}
             install_package=true
         fi
     else
@@ -680,8 +688,8 @@ integrate_react_native_sdk() {
 
         if [ "$add_choice" = "y" ] || [ "$add_choice" = "Y" ]; then
             echo ""
-            read -p "Enter version (default: latest): " target_version
-            target_version=${target_version:-latest}
+            read -p "Enter version (default: $default_target_version): " target_version
+            target_version=${target_version:-$default_target_version}
             install_package=true
         else
             print_info "Integration cancelled"
@@ -951,9 +959,10 @@ integrate_react_native_sdk() {
             read -p "Enter your TrustArc domain (default: $MAC_DOMAIN): " domain
             domain=${domain:-$MAC_DOMAIN}
         else
-            read -p "Enter your TrustArc domain (default: mac_trustarc.com): " domain
-            domain=${domain:-mac_trustarc.com}
+            read -p "Enter your TrustArc domain (default: https://trustarc.com): " domain
+            domain=${domain:-https://trustarc.com}
         fi
+        domain=$(normalize_https_url "$domain")
         save_config "MAC_DOMAIN" "$domain"
 
         create_react_native_boilerplate "$project_path" "$domain" "$project_type"
