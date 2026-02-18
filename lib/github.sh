@@ -17,6 +17,8 @@ remove_token_lines_from_shell_rc() {
     sed -i.bak '/# TrustArc GitHub Token/d' "$shell_rc" 2>/dev/null || sed -i '/# TrustArc GitHub Token/d' "$shell_rc"
     sed -i.bak '/^[[:space:]]*export[[:space:]]\+TRUSTARC_TOKEN=/d' "$shell_rc" 2>/dev/null || \
         sed -i '/^[[:space:]]*export[[:space:]]\+TRUSTARC_TOKEN=/d' "$shell_rc"
+    sed -i.bak '/^[[:space:]]*TRUSTARC_TOKEN=/d' "$shell_rc" 2>/dev/null || \
+        sed -i '/^[[:space:]]*TRUSTARC_TOKEN=/d' "$shell_rc"
 
     rm -f "$shell_rc.bak"
 }

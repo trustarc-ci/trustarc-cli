@@ -13,6 +13,9 @@ rm -rf /tmp/trustarc-boilerplate-* 2>/dev/null || true
 # GitHub repository base URL for raw content
 REPO_REF="${TRUSTARC_REF:-main}"
 REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/${REPO_REF}"
+# By default, always fetch latest remote modules.
+# Set TRUSTARC_USE_LOCAL_MODULES=1 to use local files during development.
+USE_LOCAL_MODULES="${TRUSTARC_USE_LOCAL_MODULES:-0}"
 
 # Temporary directory for downloaded modules
 TMP_LIB_DIR="/tmp/trustarc-cli-lib-$$"
@@ -22,11 +25,12 @@ load_module() {
     local module_name=$1
     local module_path="lib/${module_name}.sh"
     local cache_buster
-    cache_buster=$(date +%s%N)
+    cache_buster="$(date +%s%N)-$$-$RANDOM"
     local module_url="${REPO_BASE_URL}/${module_path}?cb=${cache_buster}"
 
-    # Check if running from local git repo first
-    if [ -f "$(dirname "$0")/${module_path}" ]; then
+    # Optional local module mode for development.
+    if [ "$USE_LOCAL_MODULES" = "1" ] && [ -f "$(dirname "$0")/${module_path}" ]; then
+        echo "[INFO] Using local module: ${module_path}"
         source "$(dirname "$0")/${module_path}"
         return 0
     fi
@@ -38,9 +42,17 @@ load_module() {
     local local_module="$TMP_LIB_DIR/${module_name}.sh"
 
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL -H "Cache-Control: no-cache" -H "Pragma: no-cache" "$module_url" -o "$local_module" 2>/dev/null
+        curl -fsSL \
+            -H "Cache-Control: no-cache, no-store, must-revalidate" \
+            -H "Pragma: no-cache" \
+            -H "Expires: 0" \
+            "$module_url" -o "$local_module" 2>/dev/null
     elif command -v wget >/dev/null 2>&1; then
-        wget -q --header="Cache-Control: no-cache" --header="Pragma: no-cache" "$module_url" -O "$local_module" 2>/dev/null
+        wget -q --no-cache \
+            --header="Cache-Control: no-cache, no-store, must-revalidate" \
+            --header="Pragma: no-cache" \
+            --header="Expires: 0" \
+            "$module_url" -O "$local_module" 2>/dev/null
     else
         echo "Error: Neither curl nor wget is available. Please install one of them."
         exit 1
@@ -80,6 +92,11 @@ load_module "menu"
 main() {
     clear
     print_header "TrustArc Mobile Consent SDK Configurator 1.2"
+    if [ "$USE_LOCAL_MODULES" = "1" ]; then
+        print_warning "Using local modules (TRUSTARC_USE_LOCAL_MODULES=1). They may be out of date."
+    else
+        print_info "Using latest remote modules from: ${REPO_REF}"
+    fi
 
     # Load existing config
     load_config
