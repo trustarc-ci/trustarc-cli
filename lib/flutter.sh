@@ -443,10 +443,9 @@ integrate_flutter_sdk() {
             read -p "Enter your TrustArc domain (default: $MAC_DOMAIN): " domain
             domain=${domain:-$MAC_DOMAIN}
         else
-            read -p "Enter your TrustArc domain (default: https://trustarc.com): " domain
-            domain=${domain:-https://trustarc.com}
+            read -p "Enter your TrustArc domain (default: mac_trustarc.com): " domain
+            domain=${domain:-mac_trustarc.com}
         fi
-        domain=$(normalize_https_url "$domain")
         save_config "MAC_DOMAIN" "$domain"
 
         create_flutter_boilerplate "$project_path" "$domain"

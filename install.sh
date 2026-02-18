@@ -143,11 +143,18 @@ main() {
     # Step 3: Save token
     if [ "$TRUSTARC_TOKEN" != "$github_token" ]; then
         echo ""
-        print_info "What happens next:"
+        print_info "This script will set up your TrustArc token in your environment."
+        print_info "The following changes will be made:"
         print_substep "Update your shell config with the new TRUSTARC_TOKEN (replaces older TrustArc token entries)"
-        print_substep "Save TRUSTARC_TOKEN to $CONFIG_FILE for future installer runs"
-        print_substep "Prompt you to optionally configure ~/.netrc for Flutter git authentication"
+        print_substep "Save TRUSTARC_TOKEN to $CONFIG_FILE for future runs"
+        print_substep "Prompt optionally to configure ~/.netrc for Flutter git authentication"
         print_substep "Set TRUSTARC_TOKEN in this current installer session"
+        echo ""
+        read -p "Do you agree with these changes? (y/n): " confirm_token_changes
+        if [ "$confirm_token_changes" != "y" ] && [ "$confirm_token_changes" != "Y" ]; then
+            print_info "Token setup cancelled by user."
+            exit 0
+        fi
         echo ""
         print_step "Saving token to environment variable"
         echo ""
