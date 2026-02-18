@@ -101,49 +101,49 @@ validate_github_token() {
 save_to_env() {
     local token=$1
     local shell_rc=""
+    local shell_rc_files=()
 
-    # Detect shell config file based on user's default shell
+    # Detect shell config file(s) based on user's default shell
     case "$SHELL" in
         */zsh)
-            shell_rc="$HOME/.zshrc"
+            shell_rc_files+=("$HOME/.zshrc")
             ;;
         */bash)
-            # Prefer .bashrc if it exists, otherwise .bash_profile
-            if [ -f "$HOME/.bashrc" ]; then
-                shell_rc="$HOME/.bashrc"
-            else
-                shell_rc="$HOME/.bash_profile"
-            fi
+            # Keep both in sync for bash users.
+            shell_rc_files+=("$HOME/.bashrc" "$HOME/.bash_profile")
             ;;
         */fish)
-            shell_rc="$HOME/.config/fish/config.fish"
+            shell_rc_files+=("$HOME/.config/fish/config.fish")
             ;;
         *)
             # Fallback: check what exists
             if [ -f "$HOME/.zshrc" ]; then
-                shell_rc="$HOME/.zshrc"
+                shell_rc_files+=("$HOME/.zshrc")
             elif [ -f "$HOME/.bashrc" ]; then
-                shell_rc="$HOME/.bashrc"
+                shell_rc_files+=("$HOME/.bashrc")
             elif [ -f "$HOME/.bash_profile" ]; then
-                shell_rc="$HOME/.bash_profile"
+                shell_rc_files+=("$HOME/.bash_profile")
             else
-                shell_rc="$HOME/.profile"
+                shell_rc_files+=("$HOME/.profile")
             fi
             ;;
     esac
 
-    # Ensure config file exists before editing it.
-    touch "$shell_rc" 2>/dev/null || true
+    for shell_rc in "${shell_rc_files[@]}"; do
+        # Ensure parent directory and file exist before editing.
+        mkdir -p "$(dirname "$shell_rc")" 2>/dev/null || true
+        touch "$shell_rc" 2>/dev/null || true
 
-    # Always replace existing token entries to avoid retaining old values.
-    remove_token_lines_from_shell_rc "$shell_rc"
+        # Always replace existing token entries to avoid retaining old values.
+        remove_token_lines_from_shell_rc "$shell_rc"
 
-    echo "" >> "$shell_rc"
-    echo "# >>> TrustArc GitHub Token >>>" >> "$shell_rc"
-    echo "export TRUSTARC_TOKEN=\"$token\"" >> "$shell_rc"
-    echo "# <<< TrustArc GitHub Token <<<" >> "$shell_rc"
-    print_success "Token saved to $shell_rc"
-    print_warning "Please run: source $shell_rc (or restart your terminal)"
+        echo "" >> "$shell_rc"
+        echo "# >>> TrustArc GitHub Token >>>" >> "$shell_rc"
+        echo "export TRUSTARC_TOKEN=\"$token\"" >> "$shell_rc"
+        echo "# <<< TrustArc GitHub Token <<<" >> "$shell_rc"
+        print_success "Token saved to $shell_rc"
+    done
+    print_warning "Please run: source ${shell_rc_files[0]} (or restart your terminal)"
 
     save_config "TRUSTARC_TOKEN" "$token"
     save_to_netrc "$token"

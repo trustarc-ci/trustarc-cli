@@ -71,58 +71,33 @@ cleanup_trustarc() {
     echo ""
     print_step "Removing token from shell configuration..."
 
-    # Detect shell config file
+    # Remove TRUSTARC_TOKEN from all common shell startup files.
+    local shell_files=(
+        "$HOME/.zshrc"
+        "$HOME/.bashrc"
+        "$HOME/.bash_profile"
+        "$HOME/.profile"
+        "$HOME/.config/fish/config.fish"
+    )
+    local removed_shell_files=()
+    local file_with_token_found=false
     local shell_rc=""
-    case "$SHELL" in
-        */zsh)
-            shell_rc="$HOME/.zshrc"
-            ;;
-        */bash)
-            if [ -f "$HOME/.bashrc" ]; then
-                shell_rc="$HOME/.bashrc"
-            else
-                shell_rc="$HOME/.bash_profile"
-            fi
-            ;;
-        */fish)
-            shell_rc="$HOME/.config/fish/config.fish"
-            ;;
-        *)
-            if [ -f "$HOME/.zshrc" ]; then
-                shell_rc="$HOME/.zshrc"
-            elif [ -f "$HOME/.bashrc" ]; then
-                shell_rc="$HOME/.bashrc"
-            elif [ -f "$HOME/.bash_profile" ]; then
-                shell_rc="$HOME/.bash_profile"
-            else
-                shell_rc="$HOME/.profile"
-            fi
-            ;;
-    esac
 
-    # Remove TRUSTARC_TOKEN from shell config
-    if [ -f "$shell_rc" ]; then
-        # Create backup
-        cp "$shell_rc" "$shell_rc.trustarc-backup"
+    for shell_rc in "${shell_files[@]}"; do
+        [ -f "$shell_rc" ] || continue
 
-        # Remove all known TrustArc token formats
-        if grep -q "TRUSTARC_TOKEN" "$shell_rc"; then
-            # Remove managed block format
-            sed -i.bak '/^# >>> TrustArc GitHub Token >>>$/,/^# <<< TrustArc GitHub Token <<<$/d' "$shell_rc" 2>/dev/null || \
-                sed -i '/^# >>> TrustArc GitHub Token >>>$/,/^# <<< TrustArc GitHub Token <<<$/d' "$shell_rc"
-
-            # Remove legacy comment/export lines
-            sed -i.bak '/# TrustArc GitHub Token/d' "$shell_rc" 2>/dev/null || sed -i '/# TrustArc GitHub Token/d' "$shell_rc"
-            sed -i.bak '/^[[:space:]]*export[[:space:]]\+TRUSTARC_TOKEN=/d' "$shell_rc" 2>/dev/null || \
-                sed -i '/^[[:space:]]*export[[:space:]]\+TRUSTARC_TOKEN=/d' "$shell_rc"
-            # Remove backup file created by sed
-            rm -f "$shell_rc.bak"
+        if grep -q "TRUSTARC_TOKEN" "$shell_rc" 2>/dev/null; then
+            file_with_token_found=true
+            cp "$shell_rc" "$shell_rc.trustarc-backup"
+            remove_token_lines_from_shell_rc "$shell_rc"
+            removed_shell_files+=("$shell_rc")
             print_success "Token removed from $shell_rc"
             print_substep "Backup created at: $shell_rc.trustarc-backup"
-        else
-            print_info "No TRUSTARC_TOKEN found in $shell_rc"
-            rm -f "$shell_rc.trustarc-backup"
         fi
+    done
+
+    if [ "$file_with_token_found" = false ]; then
+        print_info "No TRUSTARC_TOKEN entries found in shell startup files"
     fi
 
     # Remove config file
@@ -210,7 +185,14 @@ BEGIN {
     echo ""
     print_warning "IMPORTANT: You MUST restart your terminal"
     echo ""
-    print_substep "The token has been removed from: $shell_rc"
+    if [ ${#removed_shell_files[@]} -gt 0 ]; then
+        print_substep "The token has been removed from:"
+        for shell_rc in "${removed_shell_files[@]}"; do
+            print_substep "$shell_rc"
+        done
+    else
+        print_substep "No shell file updates were needed"
+    fi
     print_substep "The config file has been deleted: $config_path"
     echo ""
     print_substep "However, your CURRENT terminal session still has the token in memory"
