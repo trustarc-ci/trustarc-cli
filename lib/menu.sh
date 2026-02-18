@@ -370,6 +370,7 @@ download_sample_menu() {
     esac
 
     save_config "LAST_PLATFORM" "$platform"
+    LAST_PLATFORM="$platform"
 
     # Ask for MAC Domain
     echo ""
@@ -381,6 +382,7 @@ download_sample_menu() {
         domain=${domain:-mac_trustarc.com}
     fi
     save_config "MAC_DOMAIN" "$domain"
+    MAC_DOMAIN="$domain"
 
     # Ask for website
     echo ""
@@ -393,6 +395,7 @@ download_sample_menu() {
     fi
     website=$(normalize_https_url "$website")
     save_config "WEBSITE" "$website"
+    WEBSITE="$website"
 
     # Download
     download_sample_app "$platform" "$domain" "$website"
