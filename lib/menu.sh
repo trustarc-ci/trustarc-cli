@@ -400,8 +400,55 @@ download_sample_menu() {
     save_config "WEBSITE" "$website"
     WEBSITE="$website"
 
+    # Ask for platform-specific SDK version override
+    local sample_sdk_version=""
+    if [ "$platform" = "android" ]; then
+        local default_android_sdk_version="+"
+
+        echo ""
+        read -p "Enter Android SDK version (default: $default_android_sdk_version): " sample_sdk_version
+        sample_sdk_version=${sample_sdk_version:-$default_android_sdk_version}
+        save_config "ANDROID_SAMPLE_SDK_VERSION" "$sample_sdk_version"
+        ANDROID_SAMPLE_SDK_VERSION="$sample_sdk_version"
+    elif [ "$platform" = "ios" ]; then
+        local default_ios_sdk_version="release"
+
+        echo ""
+        read -p "Enter iOS SDK version/ref (default: $default_ios_sdk_version): " sample_sdk_version
+        sample_sdk_version=${sample_sdk_version:-$default_ios_sdk_version}
+        while [ -z "$sample_sdk_version" ]; do
+            print_error "iOS SDK version/ref cannot be empty."
+            read -p "Enter iOS SDK version/ref: " sample_sdk_version
+        done
+
+        save_config "IOS_SAMPLE_SDK_VERSION" "$sample_sdk_version"
+        IOS_SAMPLE_SDK_VERSION="$sample_sdk_version"
+    elif [ "$platform" = "flutter" ]; then
+        local default_flutter_sdk_version="release"
+
+        echo ""
+        read -p "Enter Flutter SDK version/ref (default: $default_flutter_sdk_version): " sample_sdk_version
+        sample_sdk_version=${sample_sdk_version:-$default_flutter_sdk_version}
+        while [ -z "$sample_sdk_version" ]; do
+            print_error "Flutter SDK version/ref cannot be empty."
+            read -p "Enter Flutter SDK version/ref: " sample_sdk_version
+        done
+
+        save_config "FLUTTER_SAMPLE_SDK_VERSION" "$sample_sdk_version"
+        FLUTTER_SAMPLE_SDK_VERSION="$sample_sdk_version"
+    elif [ "$platform" = "react-native" ] || [ "$platform" = "react-native-baremetal" ]; then
+        local default_react_sdk_version="latest"
+
+        echo ""
+        read -p "Enter React SDK version (default: $default_react_sdk_version): " sample_sdk_version
+        sample_sdk_version=${sample_sdk_version:-$default_react_sdk_version}
+
+        save_config "REACT_SAMPLE_SDK_VERSION" "$sample_sdk_version"
+        REACT_SAMPLE_SDK_VERSION="$sample_sdk_version"
+    fi
+
     # Download
-    download_sample_app "$platform" "$domain" "$website"
+    download_sample_app "$platform" "$domain" "$website" "$sample_sdk_version"
 
     echo ""
     read -p "Press enter to return to main menu..."

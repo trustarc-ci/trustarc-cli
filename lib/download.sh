@@ -204,6 +204,7 @@ update_config_files() {
     local extract_dir=$2
     local domain=$3
     local website=$4
+    local sdk_version=$5
 
     echo ""
     print_info "Updating configuration files..."
@@ -234,6 +235,13 @@ update_config_files() {
                 rm -f "${ios_podfile}.bak"
                 print_success "Updated iOS Podfile with authentication token"
             fi
+
+            # Update iOS TrustArc SDK version tag if provided
+            if [ -n "$sdk_version" ] && [ -f "$ios_podfile" ]; then
+                sed -i.bak "s|:branch => '[^']*'|:branch => '$sdk_version'|g" "$ios_podfile"
+                rm -f "${ios_podfile}.bak"
+                print_success "Updated iOS TrustArc SDK version tag: $sdk_version"
+            fi
             ;;
 
         "android")
@@ -256,6 +264,18 @@ update_config_files() {
                 sed -i.bak "s|YOUR_TRUSTARC_TOKEN|$TRUSTARC_TOKEN|g" "$android_settings"
                 rm -f "${android_settings}.bak"
                 print_success "Updated Android settings.gradle with authentication token"
+            fi
+
+            # Update Android TrustArc SDK version if provided
+            if [ -n "$sdk_version" ]; then
+                local android_versions_toml="$app_dir/gradle/libs.versions.toml"
+                if [ -f "$android_versions_toml" ]; then
+                    sed -i.bak "s|^trustarcConsentSdk[[:space:]]*=.*|trustarcConsentSdk = \"$sdk_version\"|" "$android_versions_toml"
+                    rm -f "${android_versions_toml}.bak"
+                    print_success "Updated Android TrustArc SDK version: $sdk_version"
+                else
+                    print_warning "Android version catalog not found; skipped SDK version override"
+                fi
             fi
             ;;
 
@@ -293,6 +313,18 @@ update_config_files() {
                 sed -i.bak "s|YOUR_TRUSTARC_TOKEN|$TRUSTARC_TOKEN|g" "$rn_podfile"
                 rm -f "${rn_podfile}.bak"
                 print_success "Updated React Native iOS Podfile with authentication token"
+            fi
+
+            # Update React Native TrustArc SDK package version if provided
+            if [ -n "$sdk_version" ]; then
+                local rn_package_json="$app_dir/package.json"
+                if [ -f "$rn_package_json" ]; then
+                    sed -i.bak "s|\"@trustarc/trustarc-react-native-consent-sdk\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"@trustarc/trustarc-react-native-consent-sdk\": \"$sdk_version\"|g" "$rn_package_json"
+                    rm -f "${rn_package_json}.bak"
+                    print_success "Updated React Native TrustArc SDK version: $sdk_version"
+                else
+                    print_warning "React Native package.json not found; skipped SDK version override"
+                fi
             fi
             ;;
 
@@ -338,6 +370,13 @@ update_config_files() {
                 print_success "Updated Flutter pubspec.yaml with authentication token"
             fi
 
+            # Update Flutter TrustArc SDK ref tag if provided
+            if [ -n "$sdk_version" ] && [ -f "$flutter_pubspec" ]; then
+                sed -i.bak "s|^[[:space:]]*ref:[[:space:]].*|      ref: $sdk_version|g" "$flutter_pubspec"
+                rm -f "${flutter_pubspec}.bak"
+                print_success "Updated Flutter TrustArc SDK version tag: $sdk_version"
+            fi
+
             # Update Flutter iOS Podfile with token
             local flutter_podfile="$app_dir/ios/Podfile"
             if [ -f "$flutter_podfile" ] && [ -n "$TRUSTARC_TOKEN" ]; then
@@ -362,6 +401,7 @@ download_sample_app() {
     local platform=$1
     local domain=$2
     local website=$3
+    local sdk_version=$4
     local token="$TRUSTARC_TOKEN"
 
     if [ -z "$token" ]; then
@@ -412,7 +452,7 @@ download_sample_app() {
 
         if [ "$redownload" != "y" ] && [ "$redownload" != "Y" ]; then
             print_info "Skipping download, updating existing configuration..."
-            update_config_files "$platform_type" "$extract_dir" "$domain" "$website"
+            update_config_files "$platform_type" "$extract_dir" "$domain" "$website" "$sdk_version"
             return 0
         else
             should_redownload=true
@@ -433,6 +473,9 @@ download_sample_app() {
     print_info "  Platform: $platform_type"
     print_info "  Domain: $domain"
     print_info "  Website: $website"
+    if [ -n "$sdk_version" ]; then
+        print_info "  SDK Version Override: $sdk_version"
+    fi
     print_info "  Source: $github_repo_url"
     echo ""
     print_info "Downloading sample application from GitHub..."
@@ -461,7 +504,6 @@ download_sample_app() {
 
     # Create temp directory
     mkdir -p "$temp_dir"
-
     # Extract only the platforms folder we need
     if unzip -q "$temp_zip" "${repo_root}/platforms/${platform_dir}/*" -d "$temp_dir" 2>/dev/null; then
         # Move the platform folder to final location
@@ -470,7 +512,7 @@ download_sample_app() {
             print_success "Extracted to: $extract_dir/"
 
             # Update configuration files with user's choices
-            update_config_files "$platform_type" "$extract_dir" "$domain" "$website"
+            update_config_files "$platform_type" "$extract_dir" "$domain" "$website" "$sdk_version"
         else
             print_error "Platform directory not found in archive"
             rm -rf "$temp_dir" "$temp_zip"
