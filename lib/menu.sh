@@ -330,6 +330,9 @@ integrate_sdk() {
 
 # Download sample application menu
 download_sample_menu() {
+    # Refresh persisted defaults each time this menu opens.
+    load_config
+
     print_header "Download Sample Application"
 
     echo "Select platform:"
