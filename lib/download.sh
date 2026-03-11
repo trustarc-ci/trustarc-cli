@@ -5,7 +5,7 @@
 
 SAMPLE_REPO_OWNER="trustarc"
 SAMPLE_REPO_NAME="ccm-mobile-consent-test-apps"
-SAMPLE_REPO_BRANCH="release"
+SAMPLE_REPO_BRANCH="testing"
 SAMPLE_REPO_TREE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/tree/${SAMPLE_REPO_BRANCH}"
 SAMPLE_REPO_ARCHIVE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/heads/${SAMPLE_REPO_BRANCH}.zip"
 
