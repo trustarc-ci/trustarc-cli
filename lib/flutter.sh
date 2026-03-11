@@ -229,7 +229,7 @@ create_flutter_boilerplate() {
     local target_file="$target_dir/TrustArcConsentImpl.dart"
 
     # Download boilerplate from GitHub
-    local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/main/TrustArcConsentImpl.dart"
+    local boilerplate_url="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/${REPO_REF:-testing}/TrustArcConsentImpl.dart"
     local temp_boilerplate="/tmp/trustarc-boilerplate-$$.dart"
 
     echo ""
