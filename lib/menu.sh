@@ -403,11 +403,25 @@ download_sample_menu() {
     # Ask for platform-specific SDK version override
     local sample_sdk_version=""
     if [ "$platform" = "android" ]; then
+        local default_android_sdk_env="${ANDROID_SAMPLE_SDK_ENV:-prod}"
+        local sample_android_sdk_env=""
         local default_android_sdk_version="+"
+
+        echo ""
+        read -p "Select Android SDK environment [prod/dev/qa/staging] (default: $default_android_sdk_env): " sample_android_sdk_env
+        sample_android_sdk_env=${sample_android_sdk_env:-$default_android_sdk_env}
+
+        while [[ ! "$sample_android_sdk_env" =~ ^(prod|dev|qa|staging)$ ]]; do
+            print_error "Invalid environment. Use prod, dev, qa, or staging."
+            read -p "Select Android SDK environment [prod/dev/qa/staging]: " sample_android_sdk_env
+        done
 
         echo ""
         read -p "Enter Android SDK version (default: $default_android_sdk_version): " sample_sdk_version
         sample_sdk_version=${sample_sdk_version:-$default_android_sdk_version}
+
+        save_config "ANDROID_SAMPLE_SDK_ENV" "$sample_android_sdk_env"
+        ANDROID_SAMPLE_SDK_ENV="$sample_android_sdk_env"
         save_config "ANDROID_SAMPLE_SDK_VERSION" "$sample_sdk_version"
         ANDROID_SAMPLE_SDK_VERSION="$sample_sdk_version"
     elif [ "$platform" = "ios" ]; then
@@ -437,12 +451,31 @@ download_sample_menu() {
         save_config "FLUTTER_SAMPLE_SDK_VERSION" "$sample_sdk_version"
         FLUTTER_SAMPLE_SDK_VERSION="$sample_sdk_version"
     elif [ "$platform" = "react-native" ] || [ "$platform" = "react-native-baremetal" ]; then
-        local default_react_sdk_version="latest"
+        local default_react_sdk_env="${REACT_SAMPLE_SDK_ENV:-prod}"
+        local sample_sdk_env=""
+        local default_react_sdk_nonprod_version="latest"
+        local sample_sdk_nonprod_version=""
 
         echo ""
-        read -p "Enter React SDK version (default: $default_react_sdk_version): " sample_sdk_version
-        sample_sdk_version=${sample_sdk_version:-$default_react_sdk_version}
+        read -p "Select React SDK environment [prod/dev/qa/staging] (default: $default_react_sdk_env): " sample_sdk_env
+        sample_sdk_env=${sample_sdk_env:-$default_react_sdk_env}
 
+        while [[ ! "$sample_sdk_env" =~ ^(prod|dev|qa|staging)$ ]]; do
+            print_error "Invalid environment. Use prod, dev, qa, or staging."
+            read -p "Select React SDK environment [prod/dev/qa/staging]: " sample_sdk_env
+        done
+
+        if [ "$sample_sdk_env" = "prod" ]; then
+            sample_sdk_version="latest"
+        else
+            echo ""
+            read -p "Enter React SDK version (default: $default_react_sdk_nonprod_version): " sample_sdk_nonprod_version
+            sample_sdk_nonprod_version=${sample_sdk_nonprod_version:-$default_react_sdk_nonprod_version}
+            sample_sdk_version="npm:@trustarc/trustarc-react-native-consent-sdk-${sample_sdk_env}@${sample_sdk_nonprod_version}"
+        fi
+
+        save_config "REACT_SAMPLE_SDK_ENV" "$sample_sdk_env"
+        REACT_SAMPLE_SDK_ENV="$sample_sdk_env"
         save_config "REACT_SAMPLE_SDK_VERSION" "$sample_sdk_version"
         REACT_SAMPLE_SDK_VERSION="$sample_sdk_version"
     fi

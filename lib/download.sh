@@ -5,7 +5,12 @@
 
 SAMPLE_REPO_OWNER="trustarc"
 SAMPLE_REPO_NAME="ccm-mobile-consent-test-apps"
-SAMPLE_REPO_BRANCH="release"
+CLI_REPO_REF="${REPO_REF:-${TRUSTARC_REF:-testing}}"
+if [ "$CLI_REPO_REF" = "main" ]; then
+    SAMPLE_REPO_BRANCH="release"
+else
+    SAMPLE_REPO_BRANCH="testing"
+fi
 SAMPLE_REPO_TREE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/tree/${SAMPLE_REPO_BRANCH}"
 SAMPLE_REPO_ARCHIVE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/heads/${SAMPLE_REPO_BRANCH}.zip"
 
@@ -266,13 +271,20 @@ update_config_files() {
                 print_success "Updated Android settings.gradle with authentication token"
             fi
 
-            # Update Android TrustArc SDK version if provided
+            # Update Android TrustArc SDK module/version if provided
             if [ -n "$sdk_version" ]; then
                 local android_versions_toml="$app_dir/gradle/libs.versions.toml"
                 if [ -f "$android_versions_toml" ]; then
+                    local android_sample_env="${ANDROID_SAMPLE_SDK_ENV:-prod}"
+                    local android_module="com.trustarc:trustarc-consent-sdk"
+                    if [ "$android_sample_env" != "prod" ]; then
+                        android_module="com.trustarc:trustarc-consent-sdk-${android_sample_env}"
+                    fi
+
+                    sed -i.bak "s|^trustarc-consent-sdk[[:space:]]*=.*|trustarc-consent-sdk = { module = \"$android_module\", version.ref = \"trustarcConsentSdk\" }|" "$android_versions_toml"
                     sed -i.bak "s|^trustarcConsentSdk[[:space:]]*=.*|trustarcConsentSdk = \"$sdk_version\"|" "$android_versions_toml"
                     rm -f "${android_versions_toml}.bak"
-                    print_success "Updated Android TrustArc SDK version: $sdk_version"
+                    print_success "Updated Android TrustArc SDK module/version: $android_module:$sdk_version"
                 else
                     print_warning "Android version catalog not found; skipped SDK version override"
                 fi
