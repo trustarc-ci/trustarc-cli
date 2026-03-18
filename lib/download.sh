@@ -5,7 +5,7 @@
 
 SAMPLE_REPO_OWNER="trustarc"
 SAMPLE_REPO_NAME="ccm-mobile-consent-test-apps"
-CLI_REPO_REF="${REPO_REF:-${TRUSTARC_REF:-}}"
+CLI_REPO_REF="${TRUSTARC_REF:-${REPO_REF:-}}"
 if [ -n "$CLI_REPO_REF" ]; then
     SAMPLE_REPO_BRANCH="$CLI_REPO_REF"
 elif [ "${REPO_REF:-}" = "main" ] || [ "${TRUSTARC_REF:-}" = "main" ]; then
