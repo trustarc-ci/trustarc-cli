@@ -5,8 +5,10 @@
 
 SAMPLE_REPO_OWNER="trustarc"
 SAMPLE_REPO_NAME="ccm-mobile-consent-test-apps"
-CLI_REPO_REF="${REPO_REF:-${TRUSTARC_REF:-testing}}"
-if [ "$CLI_REPO_REF" = "main" ]; then
+CLI_REPO_REF="${REPO_REF:-${TRUSTARC_REF:-}}"
+if [ -n "$CLI_REPO_REF" ]; then
+    SAMPLE_REPO_BRANCH="$CLI_REPO_REF"
+elif [ "${REPO_REF:-}" = "main" ] || [ "${TRUSTARC_REF:-}" = "main" ]; then
     SAMPLE_REPO_BRANCH="release"
 else
     SAMPLE_REPO_BRANCH="testing"
@@ -448,12 +450,13 @@ download_sample_app() {
             ;;
     esac
 
-    local github_repo_url="$SAMPLE_REPO_TREE_URL"
-    local archive_url="$SAMPLE_REPO_ARCHIVE_URL"
+    local selected_branch="$SAMPLE_REPO_BRANCH"
+    local github_repo_url="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/tree/${selected_branch}"
+    local archive_url="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/heads/${selected_branch}.zip"
     local temp_zip="trustarc-sample-${platform_type}-$$.zip"
     local temp_dir="trustarc-sample-${platform_type}-$$"
     local extract_dir="trustarc-sample-${platform_type}"
-    local repo_root="${SAMPLE_REPO_NAME}-${SAMPLE_REPO_BRANCH}"
+    local repo_root="${SAMPLE_REPO_NAME}-${selected_branch}"
     local should_redownload=false
 
     # Check if already extracted
@@ -492,19 +495,41 @@ download_sample_app() {
     echo ""
     print_info "Downloading sample application from GitHub..."
 
-    # Download repo zip
+    # Download repo zip, fallback to testing if selected branch is not available
+    local download_ok=0
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL -H "Authorization: token $token" "$archive_url" -o "$temp_zip" || {
-            print_error "Failed to download from GitHub"
-            return 1
-        }
+        if curl -fsSL -H "Authorization: token $token" "$archive_url" -o "$temp_zip"; then
+            download_ok=1
+        fi
     elif command -v wget >/dev/null 2>&1; then
-        wget -q --header="Authorization: token $token" "$archive_url" -O "$temp_zip" || {
-            print_error "Failed to download from GitHub"
-            return 1
-        }
+        if wget -q --header="Authorization: token $token" "$archive_url" -O "$temp_zip"; then
+            download_ok=1
+        fi
     else
         print_error "Neither curl nor wget is available"
+        return 1
+    fi
+
+    if [ "$download_ok" -ne 1 ] && [ "$selected_branch" != "testing" ]; then
+        print_warning "Branch '${selected_branch}' not found or inaccessible in ${SAMPLE_REPO_NAME}. Falling back to 'testing'."
+        selected_branch="testing"
+        github_repo_url="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/tree/${selected_branch}"
+        archive_url="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/heads/${selected_branch}.zip"
+        repo_root="${SAMPLE_REPO_NAME}-${selected_branch}"
+
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL -H "Authorization: token $token" "$archive_url" -o "$temp_zip" || {
+                print_error "Failed to download from GitHub"
+                return 1
+            }
+        else
+            wget -q --header="Authorization: token $token" "$archive_url" -O "$temp_zip" || {
+                print_error "Failed to download from GitHub"
+                return 1
+            }
+        fi
+    elif [ "$download_ok" -ne 1 ]; then
+        print_error "Failed to download from GitHub"
         return 1
     fi
 
