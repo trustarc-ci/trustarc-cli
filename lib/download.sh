@@ -5,13 +5,22 @@
 
 SAMPLE_REPO_OWNER="trustarc"
 SAMPLE_REPO_NAME="ccm-mobile-consent-test-apps"
-CLI_REPO_REF="${TRUSTARC_REF:-${REPO_REF:-}}"
-if [ -n "$CLI_REPO_REF" ]; then
-    SAMPLE_REPO_BRANCH="$CLI_REPO_REF"
-elif [ "${REPO_REF:-}" = "main" ] || [ "${TRUSTARC_REF:-}" = "main" ]; then
-    SAMPLE_REPO_BRANCH="release"
+# Sample app branch selection priority:
+# 1) APP_VERSION (explicit override for sample app branch)
+# 2) TRUSTARC_REF / REPO_REF (shared ref)
+# 3) "release" when CLI is on main
+# 4) "testing" (default)
+if [ -n "${APP_VERSION:-}" ]; then
+    SAMPLE_REPO_BRANCH="$APP_VERSION"
 else
-    SAMPLE_REPO_BRANCH="testing"
+    CLI_REPO_REF="${TRUSTARC_REF:-${REPO_REF:-}}"
+    if [ -n "$CLI_REPO_REF" ]; then
+        SAMPLE_REPO_BRANCH="$CLI_REPO_REF"
+    elif [ "${REPO_REF:-}" = "main" ] || [ "${TRUSTARC_REF:-}" = "main" ]; then
+        SAMPLE_REPO_BRANCH="release"
+    else
+        SAMPLE_REPO_BRANCH="testing"
+    fi
 fi
 SAMPLE_REPO_TREE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/tree/${SAMPLE_REPO_BRANCH}"
 SAMPLE_REPO_ARCHIVE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/heads/${SAMPLE_REPO_BRANCH}.zip"

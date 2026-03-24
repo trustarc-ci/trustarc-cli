@@ -14,12 +14,15 @@ rm -rf /tmp/trustarc-boilerplate-* 2>/dev/null || true
 # CLI module ref selection priority:
 # 1) REPO_REF (explicit)
 # 2) TRUSTARC_CLI_REF (explicit)
-# 3) TRUSTARC_REF (only: testing/main/release; any other value falls back to testing)
-# 4) main (default)
+# 3) CLI_VERSION (explicit)
+# 4) TRUSTARC_REF (only: testing/main/release; any other value falls back to testing)
+# 5) main (default)
 if [ -n "${REPO_REF:-}" ]; then
     REPO_REF="$REPO_REF"
 elif [ -n "${TRUSTARC_CLI_REF:-}" ]; then
     REPO_REF="$TRUSTARC_CLI_REF"
+elif [ -n "${CLI_VERSION:-}" ]; then
+    REPO_REF="$CLI_VERSION"
 elif [ -n "${TRUSTARC_REF:-}" ]; then
     case "$TRUSTARC_REF" in
         testing|main|release)
