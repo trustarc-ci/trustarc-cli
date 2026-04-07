@@ -5,8 +5,8 @@
 
 SAMPLE_REPO_OWNER="trustarc"
 SAMPLE_REPO_NAME="ccm-mobile-consent-test-apps"
-# Sample app branch selection priority:
-# 1) APP_VERSION (explicit override for sample app branch)
+# Sample app ref selection priority:
+# 1) APP_VERSION (explicit override for sample app ref)
 # 2) TRUSTARC_REF / REPO_REF (shared ref)
 # 3) "release" when CLI is on main
 # 4) "testing" (default)
@@ -22,8 +22,72 @@ else
         SAMPLE_REPO_BRANCH="testing"
     fi
 fi
-SAMPLE_REPO_TREE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/tree/${SAMPLE_REPO_BRANCH}"
-SAMPLE_REPO_ARCHIVE_URL="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/heads/${SAMPLE_REPO_BRANCH}.zip"
+
+sample_repo_archive_url() {
+    local ref="$1"
+    local ref_kind="$2"
+
+    case "$ref_kind" in
+        "branch")
+            echo "https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/heads/${ref}.zip"
+            ;;
+        "tag")
+            echo "https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/tags/${ref}.zip"
+            ;;
+        "commit")
+            echo "https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/${ref}.zip"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+sample_repo_source_url() {
+    local ref="$1"
+    local ref_kind="$2"
+
+    case "$ref_kind" in
+        "branch"|"tag")
+            echo "https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/tree/${ref}"
+            ;;
+        "commit")
+            echo "https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/commit/${ref}"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+download_archive_for_ref() {
+    local ref="$1"
+    local token="$2"
+    local output_zip="$3"
+    local ref_kind=""
+    local archive_url=""
+
+    for ref_kind in "branch" "tag" "commit"; do
+        archive_url=$(sample_repo_archive_url "$ref" "$ref_kind") || continue
+
+        if command -v curl >/dev/null 2>&1; then
+            if curl -fsSL -H "Authorization: token $token" "$archive_url" -o "$output_zip"; then
+                echo "$ref_kind"
+                return 0
+            fi
+        elif command -v wget >/dev/null 2>&1; then
+            if wget -q --header="Authorization: token $token" "$archive_url" -O "$output_zip"; then
+                echo "$ref_kind"
+                return 0
+            fi
+        else
+            print_error "Neither curl nor wget is available"
+            return 2
+        fi
+    done
+
+    return 1
+}
 
 # Dependency checks for sample app platforms
 command_exists() {
@@ -459,13 +523,13 @@ download_sample_app() {
             ;;
     esac
 
-    local selected_branch="$SAMPLE_REPO_BRANCH"
-    local github_repo_url="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/tree/${selected_branch}"
-    local archive_url="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/heads/${selected_branch}.zip"
+    local selected_ref="$SAMPLE_REPO_BRANCH"
+    local selected_ref_kind=""
+    local github_repo_url=""
     local temp_zip="trustarc-sample-${platform_type}-$$.zip"
     local temp_dir="trustarc-sample-${platform_type}-$$"
     local extract_dir="trustarc-sample-${platform_type}"
-    local repo_root="${SAMPLE_REPO_NAME}-${selected_branch}"
+    local repo_root=""
     local should_redownload=false
 
     # Check if already extracted
@@ -500,47 +564,32 @@ download_sample_app() {
     if [ -n "$sdk_version" ]; then
         print_info "  SDK Version Override: $sdk_version"
     fi
-    print_info "  Source: $github_repo_url"
     echo ""
     print_info "Downloading sample application from GitHub..."
 
-    # Download repo zip, fallback to testing if selected branch is not available
-    local download_ok=0
-    if command -v curl >/dev/null 2>&1; then
-        if curl -fsSL -H "Authorization: token $token" "$archive_url" -o "$temp_zip"; then
-            download_ok=1
-        fi
-    elif command -v wget >/dev/null 2>&1; then
-        if wget -q --header="Authorization: token $token" "$archive_url" -O "$temp_zip"; then
-            download_ok=1
-        fi
-    else
-        print_error "Neither curl nor wget is available"
+    # Download repo zip from ref, checking in order: branch -> tag -> commit.
+    selected_ref_kind=$(download_archive_for_ref "$selected_ref" "$token" "$temp_zip")
+    local download_status=$?
+
+    if [ "$download_status" -eq 2 ]; then
         return 1
     fi
 
-    if [ "$download_ok" -ne 1 ] && [ "$selected_branch" != "testing" ]; then
-        print_warning "Branch '${selected_branch}' not found or inaccessible in ${SAMPLE_REPO_NAME}. Falling back to 'testing'."
-        selected_branch="testing"
-        github_repo_url="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/tree/${selected_branch}"
-        archive_url="https://github.com/${SAMPLE_REPO_OWNER}/${SAMPLE_REPO_NAME}/archive/refs/heads/${selected_branch}.zip"
-        repo_root="${SAMPLE_REPO_NAME}-${selected_branch}"
+    if [ "$download_status" -ne 0 ] && [ "$selected_ref" != "release" ]; then
+        print_warning "Ref '${selected_ref}' was not found as a branch, tag, or commit in ${SAMPLE_REPO_NAME}. Falling back to 'release'."
+        selected_ref="release"
+        selected_ref_kind=$(download_archive_for_ref "$selected_ref" "$token" "$temp_zip")
+        download_status=$?
+    fi
 
-        if command -v curl >/dev/null 2>&1; then
-            curl -fsSL -H "Authorization: token $token" "$archive_url" -o "$temp_zip" || {
-                print_error "Failed to download from GitHub"
-                return 1
-            }
-        else
-            wget -q --header="Authorization: token $token" "$archive_url" -O "$temp_zip" || {
-                print_error "Failed to download from GitHub"
-                return 1
-            }
-        fi
-    elif [ "$download_ok" -ne 1 ]; then
+    if [ "$download_status" -ne 0 ]; then
         print_error "Failed to download from GitHub"
         return 1
     fi
+
+    github_repo_url=$(sample_repo_source_url "$selected_ref" "$selected_ref_kind")
+    print_info "  Source: $github_repo_url"
+    print_info "  Resolved Ref: $selected_ref (${selected_ref_kind})"
 
     print_success "Downloaded repository archive"
 
@@ -550,6 +599,15 @@ download_sample_app() {
 
     # Create temp directory
     mkdir -p "$temp_dir"
+
+    # Resolve root folder inside downloaded archive dynamically.
+    repo_root=$(unzip -Z -1 "$temp_zip" 2>/dev/null | head -1 | cut -d/ -f1)
+    if [ -z "$repo_root" ]; then
+        print_error "Failed to inspect downloaded archive"
+        rm -rf "$temp_dir" "$temp_zip"
+        return 1
+    fi
+
     # Extract only the platforms folder we need
     if unzip -q "$temp_zip" "${repo_root}/platforms/${platform_dir}/*" -d "$temp_dir" 2>/dev/null; then
         # Move the platform folder to final location
