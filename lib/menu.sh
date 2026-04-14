@@ -405,7 +405,7 @@ download_sample_menu() {
     if [ "$platform" = "android" ]; then
         local default_android_sdk_env="${ANDROID_SAMPLE_SDK_ENV:-prod}"
         local sample_android_sdk_env=""
-        local default_android_sdk_version="+"
+        local default_android_sdk_version="${ANDROID_SAMPLE_SDK_VERSION:-+}"
 
         echo ""
         read -p "Select Android SDK environment [prod/dev/qa/staging] (default: $default_android_sdk_env): " sample_android_sdk_env
@@ -425,7 +425,7 @@ download_sample_menu() {
         save_config "ANDROID_SAMPLE_SDK_VERSION" "$sample_sdk_version"
         ANDROID_SAMPLE_SDK_VERSION="$sample_sdk_version"
     elif [ "$platform" = "ios" ]; then
-        local default_ios_sdk_version="release"
+        local default_ios_sdk_version="${IOS_SAMPLE_SDK_VERSION:-release}"
 
         echo ""
         read -p "Enter iOS SDK version/ref (default: $default_ios_sdk_version): " sample_sdk_version

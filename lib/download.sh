@@ -98,6 +98,11 @@ is_macos() {
     [[ "$OSTYPE" == "darwin"* ]]
 }
 
+# Escape text for safe sed replacement values.
+sed_escape_replacement() {
+    printf '%s' "$1" | sed -e 's/[\\|&]/\\&/g'
+}
+
 detect_android_sdk() {
     local candidates=()
 
@@ -285,6 +290,15 @@ update_config_files() {
     local domain=$3
     local website=$4
     local sdk_version=$5
+    local escaped_domain
+    local escaped_website
+    local escaped_token
+    local escaped_sdk_version
+
+    escaped_domain=$(sed_escape_replacement "$domain")
+    escaped_website=$(sed_escape_replacement "$website")
+    escaped_token=$(sed_escape_replacement "$TRUSTARC_TOKEN")
+    escaped_sdk_version=$(sed_escape_replacement "$sdk_version")
 
     echo ""
     print_info "Updating configuration files..."
@@ -299,9 +313,9 @@ update_config_files() {
 
             if [ -f "$ios_config" ]; then
                 # Update macDomain
-                sed -i.bak "s|let macDomain: String = \".*\"|let macDomain: String = \"$domain\"|" "$ios_config"
+                sed -i.bak "s|let macDomain: String = \".*\"|let macDomain: String = \"$escaped_domain\"|" "$ios_config"
                 # Update testWebsiteUrl
-                sed -i.bak "s|let testWebsiteUrl: String = \".*\"|let testWebsiteUrl: String = \"$website\"|" "$ios_config"
+                sed -i.bak "s|let testWebsiteUrl: String = \".*\"|let testWebsiteUrl: String = \"$escaped_website\"|" "$ios_config"
                 rm -f "${ios_config}.bak"
                 print_success "Updated iOS AppConfig.swift"
             else
@@ -311,14 +325,14 @@ update_config_files() {
             # Update iOS Podfile with token
             local ios_podfile=$(find "$app_dir" -name "Podfile" -maxdepth 2 2>/dev/null | head -1)
             if [ -f "$ios_podfile" ] && [ -n "$TRUSTARC_TOKEN" ]; then
-                sed -i.bak "s|YOUR_TRUSTARC_TOKEN|$TRUSTARC_TOKEN|g" "$ios_podfile"
+                sed -i.bak "s|YOUR_TRUSTARC_TOKEN|$escaped_token|g" "$ios_podfile"
                 rm -f "${ios_podfile}.bak"
                 print_success "Updated iOS Podfile with authentication token"
             fi
 
             # Update iOS TrustArc SDK version tag if provided
             if [ -n "$sdk_version" ] && [ -f "$ios_podfile" ]; then
-                sed -i.bak "s|:branch => '[^']*'|:branch => '$sdk_version'|g" "$ios_podfile"
+                sed -E -i.bak "/pod[[:space:]]+['\"]TrustArcConsentSDK['\"]/ s|:branch[[:space:]]*=>[[:space:]]*['\"][^'\"]*['\"]|:branch => '$escaped_sdk_version'|g" "$ios_podfile"
                 rm -f "${ios_podfile}.bak"
                 print_success "Updated iOS TrustArc SDK version tag: $sdk_version"
             fi
@@ -329,9 +343,9 @@ update_config_files() {
             local android_config="$app_dir/app/src/main/java/com/example/trustarcmobileapp/config/AppConfig.kt"
             if [ -f "$android_config" ]; then
                 # Update MAC_DOMAIN
-                sed -i.bak "s|const val MAC_DOMAIN: String = \".*\"|const val MAC_DOMAIN: String = \"$domain\"|" "$android_config"
+                sed -i.bak "s|const val MAC_DOMAIN: String = \".*\"|const val MAC_DOMAIN: String = \"$escaped_domain\"|" "$android_config"
                 # Update TEST_WEBSITE_URL
-                sed -i.bak "s|const val TEST_WEBSITE_URL: String = \".*\"|const val TEST_WEBSITE_URL: String = \"$website\"|" "$android_config"
+                sed -i.bak "s|const val TEST_WEBSITE_URL: String = \".*\"|const val TEST_WEBSITE_URL: String = \"$escaped_website\"|" "$android_config"
                 rm -f "${android_config}.bak"
                 print_success "Updated Android AppConfig.kt"
             else
@@ -341,7 +355,7 @@ update_config_files() {
             # Update Android settings.gradle with token
             local android_settings="$app_dir/settings.gradle"
             if [ -f "$android_settings" ] && [ -n "$TRUSTARC_TOKEN" ]; then
-                sed -i.bak "s|YOUR_TRUSTARC_TOKEN|$TRUSTARC_TOKEN|g" "$android_settings"
+                sed -i.bak "s|YOUR_TRUSTARC_TOKEN|$escaped_token|g" "$android_settings"
                 rm -f "${android_settings}.bak"
                 print_success "Updated Android settings.gradle with authentication token"
             fi
@@ -356,8 +370,8 @@ update_config_files() {
                         android_module="com.trustarc:trustarc-consent-sdk-${android_sample_env}"
                     fi
 
-                    sed -i.bak "s|^trustarc-consent-sdk[[:space:]]*=.*|trustarc-consent-sdk = { module = \"$android_module\", version.ref = \"trustarcConsentSdk\" }|" "$android_versions_toml"
-                    sed -i.bak "s|^trustarcConsentSdk[[:space:]]*=.*|trustarcConsentSdk = \"$sdk_version\"|" "$android_versions_toml"
+                    sed -i.bak "s|^[[:space:]]*trustarc-consent-sdk[[:space:]]*=.*|trustarc-consent-sdk = { module = \"$android_module\", version.ref = \"trustarcConsentSdk\" }|" "$android_versions_toml"
+                    sed -i.bak "s|^[[:space:]]*trustarcConsentSdk[[:space:]]*=.*|trustarcConsentSdk = \"$escaped_sdk_version\"|" "$android_versions_toml"
                     rm -f "${android_versions_toml}.bak"
                     print_success "Updated Android TrustArc SDK module/version: $android_module:$sdk_version"
                 else
