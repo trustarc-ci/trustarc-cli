@@ -7,17 +7,17 @@ SAMPLE_REPO_OWNER="trustarc"
 SAMPLE_REPO_NAME="ccm-mobile-consent-test-apps"
 # Sample app ref selection priority:
 # 1) APP_VERSION (explicit override for sample app ref)
-# 2) TRUSTARC_REF / REPO_REF (shared ref)
-# 3) "release" (default)
+# 2) TRUSTARC_REF (shared ref)
+# 3) REPO_REF when explicitly provided
+# 4) "release" (default)
 if [ -n "${APP_VERSION:-}" ]; then
     SAMPLE_REPO_BRANCH="$APP_VERSION"
+elif [ -n "${TRUSTARC_REF:-}" ]; then
+    SAMPLE_REPO_BRANCH="$TRUSTARC_REF"
+elif [ -n "${REPO_REF:-}" ] && [ "${REPO_REF_IS_DEFAULT:-0}" != "1" ]; then
+    SAMPLE_REPO_BRANCH="$REPO_REF"
 else
-    CLI_REPO_REF="${TRUSTARC_REF:-${REPO_REF:-}}"
-    if [ -n "$CLI_REPO_REF" ]; then
-        SAMPLE_REPO_BRANCH="$CLI_REPO_REF"
-    else
-        SAMPLE_REPO_BRANCH="release"
-    fi
+    SAMPLE_REPO_BRANCH="release"
 fi
 
 sample_repo_archive_url() {

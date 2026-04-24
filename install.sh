@@ -17,6 +17,7 @@ rm -rf /tmp/trustarc-boilerplate-* 2>/dev/null || true
 # 3) CLI_VERSION (explicit)
 # 4) TRUSTARC_REF (only: testing/main/release; any other value falls back to testing)
 # 5) main (default)
+REPO_REF_IS_DEFAULT=0
 if [ -n "${REPO_REF:-}" ]; then
     REPO_REF="$REPO_REF"
 elif [ -n "${TRUSTARC_CLI_REF:-}" ]; then
@@ -34,6 +35,7 @@ elif [ -n "${TRUSTARC_REF:-}" ]; then
     esac
 else
     REPO_REF="main"
+    REPO_REF_IS_DEFAULT=1
 fi
 REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/${REPO_REF}"
 # By default, always fetch latest remote modules.
