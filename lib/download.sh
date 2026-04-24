@@ -8,18 +8,15 @@ SAMPLE_REPO_NAME="ccm-mobile-consent-test-apps"
 # Sample app ref selection priority:
 # 1) APP_VERSION (explicit override for sample app ref)
 # 2) TRUSTARC_REF / REPO_REF (shared ref)
-# 3) "release" when CLI is on main
-# 4) "testing" (default)
+# 3) "release" (default)
 if [ -n "${APP_VERSION:-}" ]; then
     SAMPLE_REPO_BRANCH="$APP_VERSION"
 else
     CLI_REPO_REF="${TRUSTARC_REF:-${REPO_REF:-}}"
     if [ -n "$CLI_REPO_REF" ]; then
         SAMPLE_REPO_BRANCH="$CLI_REPO_REF"
-    elif [ "${REPO_REF:-}" = "main" ] || [ "${TRUSTARC_REF:-}" = "main" ]; then
-        SAMPLE_REPO_BRANCH="release"
     else
-        SAMPLE_REPO_BRANCH="testing"
+        SAMPLE_REPO_BRANCH="release"
     fi
 fi
 
