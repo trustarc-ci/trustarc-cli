@@ -338,37 +338,40 @@ download_sample_menu() {
     echo "Select platform:"
     echo ""
     echo "  ${BOLD}1${NC}) iOS (CocoaPods)"
-    echo "  ${BOLD}2${NC}) Android"
-    echo "  ${BOLD}3${NC}) React Native (Expo)"
-    echo "  ${BOLD}4${NC}) React Native (Bare Metal)"
-    echo "  ${BOLD}5${NC}) Flutter"
-    echo "  ${BOLD}6${NC}) Back to main menu"
+    echo "  ${BOLD}2${NC}) iOS (Swift Package Manager)"
+    echo "  ${BOLD}3${NC}) Android"
+    echo "  ${BOLD}4${NC}) React Native (Expo)"
+    echo "  ${BOLD}5${NC}) React Native (Bare Metal)"
+    echo "  ${BOLD}6${NC}) Flutter"
+    echo "  ${BOLD}7${NC}) Back to main menu"
     echo ""
 
     local default_platform_choice=""
     case "$LAST_PLATFORM" in
         ios) default_platform_choice="1" ;;
-        android) default_platform_choice="2" ;;
-        react-native) default_platform_choice="3" ;;
-        react-native-baremetal) default_platform_choice="4" ;;
-        flutter) default_platform_choice="5" ;;
+        ios-spm) default_platform_choice="2" ;;
+        android) default_platform_choice="3" ;;
+        react-native) default_platform_choice="4" ;;
+        react-native-baremetal) default_platform_choice="5" ;;
+        flutter) default_platform_choice="6" ;;
     esac
 
     if [ -n "$default_platform_choice" ]; then
-        read -p "Enter your choice (1-6, default: $default_platform_choice): " platform_choice
+        read -p "Enter your choice (1-7, default: $default_platform_choice): " platform_choice
         platform_choice=${platform_choice:-$default_platform_choice}
     else
-        read -p "Enter your choice (1-6): " platform_choice
+        read -p "Enter your choice (1-7): " platform_choice
     fi
 
     local platform=""
     case "$platform_choice" in
         1) platform="ios" ;;
-        2) platform="android" ;;
-        3) platform="react-native" ;;
-        4) platform="react-native-baremetal" ;;
-        5) platform="flutter" ;;
-        6) show_main_menu; return ;;
+        2) platform="ios-spm" ;;
+        3) platform="android" ;;
+        4) platform="react-native" ;;
+        5) platform="react-native-baremetal" ;;
+        6) platform="flutter" ;;
+        7) show_main_menu; return ;;
         *) print_error "Invalid choice"; download_sample_menu; return ;;
     esac
 
@@ -424,7 +427,7 @@ download_sample_menu() {
         ANDROID_SAMPLE_SDK_ENV="$sample_android_sdk_env"
         save_config "ANDROID_SAMPLE_SDK_VERSION" "$sample_sdk_version"
         ANDROID_SAMPLE_SDK_VERSION="$sample_sdk_version"
-    elif [ "$platform" = "ios" ]; then
+    elif [ "$platform" = "ios" ] || [ "$platform" = "ios-spm" ]; then
         local default_ios_sdk_version="${IOS_SAMPLE_SDK_VERSION:-release}"
 
         echo ""

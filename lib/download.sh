@@ -147,6 +147,13 @@ check_platform_dependencies() {
                 command_exists pod || missing+=("CocoaPods (pod)")
             fi
             ;;
+        "ios-spm")
+            if ! is_macos; then
+                missing+=("macOS (required for iOS builds)")
+            else
+                command_exists xcodebuild || missing+=("Xcode Command Line Tools (xcodebuild)")
+            fi
+            ;;
         "android")
             command_exists java || missing+=("Java (JDK)")
             if ! detect_android_sdk >/dev/null 2>&1; then
@@ -335,6 +342,40 @@ update_config_files() {
             fi
             ;;
 
+        "ios-spm")
+            # Update iOS SPM AppConfig.swift
+            local ios_spm_config=$(find "$app_dir" -name "AppConfig.swift" 2>/dev/null | head -1)
+
+            if [ -f "$ios_spm_config" ]; then
+                # Update macDomain
+                sed -i.bak "s|let macDomain: String = \".*\"|let macDomain: String = \"$escaped_domain\"|" "$ios_spm_config"
+                # Update testWebsiteUrl
+                sed -i.bak "s|let testWebsiteUrl: String = \".*\"|let testWebsiteUrl: String = \"$escaped_website\"|" "$ios_spm_config"
+                rm -f "${ios_spm_config}.bak"
+                print_success "Updated iOS (SPM) AppConfig.swift"
+            else
+                print_warning "iOS AppConfig.swift not found in $app_dir"
+            fi
+
+            # Update README with the SDK version/branch
+            if [ -n "$sdk_version" ]; then
+                local ios_spm_readme="$app_dir/README.md"
+                if [ -f "$ios_spm_readme" ]; then
+                    sed -i.bak "s|Select the \*\*release\*\* branch|Select the **${escaped_sdk_version}** branch|" "$ios_spm_readme"
+                    rm -f "${ios_spm_readme}.bak"
+                    print_success "Updated iOS (SPM) README with branch: $sdk_version"
+                fi
+            fi
+
+            echo ""
+            print_info "Next steps:"
+            print_info "  1. Open TrustArcMobileApp.xcodeproj in Xcode"
+            print_info "  2. Go to File > Add Package Dependencies..."
+            print_info "  3. Enter: https://github.com/trustarc/trustarc-mobile-consent.git"
+            print_info "  4. Select branch: ${sdk_version:-release}"
+            print_info "  5. Add the package to your app target"
+            ;;
+
         "android")
             # Update Android AppConfig.kt
             local android_config="$app_dir/app/src/main/java/com/example/trustarcmobileapp/config/AppConfig.kt"
@@ -515,6 +556,10 @@ download_sample_app() {
         "ios")
             platform_type="ios"
             platform_dir="ios"
+            ;;
+        "ios-spm")
+            platform_type="ios-spm"
+            platform_dir="ios-spm"
             ;;
         "android")
             platform_type="android"
