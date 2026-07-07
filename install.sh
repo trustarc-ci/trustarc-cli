@@ -46,6 +46,12 @@ else
 fi
 
 chmod +x "$BINARY"
+
+# Ad-hoc sign on macOS — newer dyld requires LC_UUID which codesign restores
+if [ "$OS" = "darwin" ] && command -v codesign >/dev/null 2>&1; then
+  codesign -s - "$BINARY" 2>/dev/null || true
+fi
+
 echo "✓ Ready"
 echo ""
 
