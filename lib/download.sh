@@ -297,12 +297,43 @@ update_config_files() {
     local escaped_domain
     local escaped_website
     local escaped_token
-    local escaped_sdk_version
 
     escaped_domain=$(sed_escape_replacement "$domain")
     escaped_website=$(sed_escape_replacement "$website")
     escaped_token=$(sed_escape_replacement "$TRUSTARC_TOKEN")
-    escaped_sdk_version=$(sed_escape_replacement "$sdk_version")
+
+    # Resolve per-platform SDK versions from the ccm-mobile-preview versions JSON
+    # when sdk_version is a channel name ("release"/"stable") or empty.
+    local ios_sdk_ver android_sdk_ver rn_sdk_ver flutter_sdk_ver
+    if [ "$sdk_version" = "release" ] || [ "$sdk_version" = "stable" ] || [ -z "$sdk_version" ]; then
+        local sdk_channel="${sdk_version:-release}"
+        local _sdk_json="/tmp/trustarc-sdk-versions-$$.json"
+        local _sdk_fetched=0
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "https://ccm-mobile-preview.vercel.app/docs/sdk-versions.json" -o "$_sdk_json" 2>/dev/null && _sdk_fetched=1 || true
+        elif command -v wget >/dev/null 2>&1; then
+            wget -q "https://ccm-mobile-preview.vercel.app/docs/sdk-versions.json" -O "$_sdk_json" 2>/dev/null && _sdk_fetched=1 || true
+        fi
+        if [ "$_sdk_fetched" -eq 1 ] && [ -s "$_sdk_json" ] && command -v python3 >/dev/null 2>&1; then
+            ios_sdk_ver=$(JSON_FILE="$_sdk_json" CHANNEL="$sdk_channel" FIELD="ios"         python3 -c "import json,os; d=json.load(open(os.environ['JSON_FILE'])); print(d.get(os.environ['CHANNEL'],{}).get(os.environ['FIELD'],''))" 2>/dev/null || echo "$sdk_channel")
+            android_sdk_ver=$(JSON_FILE="$_sdk_json" CHANNEL="$sdk_channel" FIELD="android"     python3 -c "import json,os; d=json.load(open(os.environ['JSON_FILE'])); print(d.get(os.environ['CHANNEL'],{}).get(os.environ['FIELD'],''))" 2>/dev/null || echo "")
+            rn_sdk_ver=$(JSON_FILE="$_sdk_json" CHANNEL="$sdk_channel" FIELD="reactNative"  python3 -c "import json,os; d=json.load(open(os.environ['JSON_FILE'])); print(d.get(os.environ['CHANNEL'],{}).get(os.environ['FIELD'],''))" 2>/dev/null || echo "")
+            flutter_sdk_ver=$(JSON_FILE="$_sdk_json" CHANNEL="$sdk_channel" FIELD="flutter"     python3 -c "import json,os; d=json.load(open(os.environ['JSON_FILE'])); print(d.get(os.environ['CHANNEL'],{}).get(os.environ['FIELD'],''))" 2>/dev/null || echo "$sdk_channel")
+            rm -f "$_sdk_json"
+        else
+            rm -f "$_sdk_json" 2>/dev/null
+            ios_sdk_ver="$sdk_channel"
+            android_sdk_ver=""
+            rn_sdk_ver=""
+            flutter_sdk_ver="$sdk_channel"
+        fi
+    else
+        # Explicit version override (e.g. a specific dev tag) — iOS/Flutter use it as-is
+        ios_sdk_ver="$sdk_version"
+        android_sdk_ver="$sdk_version"
+        rn_sdk_ver="$sdk_version"
+        flutter_sdk_ver="$sdk_version"
+    fi
 
     echo ""
     print_info "Updating configuration files..."
@@ -335,10 +366,12 @@ update_config_files() {
             fi
 
             # Update iOS TrustArc SDK version tag if provided
-            if [ -n "$sdk_version" ] && [ -f "$ios_podfile" ]; then
-                sed -E -i.bak "/pod[[:space:]]+['\"]TrustArcConsentSDK['\"]/ s|:branch[[:space:]]*=>[[:space:]]*['\"][^'\"]*['\"]|:branch => '$escaped_sdk_version'|g" "$ios_podfile"
+            if [ -n "$ios_sdk_ver" ] && [ -f "$ios_podfile" ]; then
+                local escaped_ios_sdk_ver
+                escaped_ios_sdk_ver=$(sed_escape_replacement "$ios_sdk_ver")
+                sed -E -i.bak "/pod[[:space:]]+['\"]TrustArcConsentSDK['\"]/ s|:tag[[:space:]]*=>[[:space:]]*['\"][^'\"]*['\"]|:tag => '$escaped_ios_sdk_ver'|g" "$ios_podfile"
                 rm -f "${ios_podfile}.bak"
-                print_success "Updated iOS TrustArc SDK version tag: $sdk_version"
+                print_success "Updated iOS TrustArc SDK version tag: $ios_sdk_ver"
             fi
             ;;
 
@@ -358,12 +391,14 @@ update_config_files() {
             fi
 
             # Update README with the SDK version/branch
-            if [ -n "$sdk_version" ]; then
+            if [ -n "$ios_sdk_ver" ]; then
                 local ios_spm_readme="$app_dir/README.md"
                 if [ -f "$ios_spm_readme" ]; then
-                    sed -i.bak "s|Select the \*\*release\*\* branch|Select the **${escaped_sdk_version}** branch|" "$ios_spm_readme"
+                    local escaped_ios_spm_ver
+                    escaped_ios_spm_ver=$(sed_escape_replacement "$ios_sdk_ver")
+                    sed -i.bak "s|Select the \*\*release\*\* branch|Select the **${escaped_ios_spm_ver}** branch|" "$ios_spm_readme"
                     rm -f "${ios_spm_readme}.bak"
-                    print_success "Updated iOS (SPM) README with branch: $sdk_version"
+                    print_success "Updated iOS (SPM) README with branch: $ios_sdk_ver"
                 fi
             fi
 
@@ -372,7 +407,7 @@ update_config_files() {
             print_info "  1. Open TrustArcMobileApp.xcodeproj in Xcode"
             print_info "  2. Go to File > Add Package Dependencies..."
             print_info "  3. Enter: https://github.com/trustarc/trustarc-mobile-consent.git"
-            print_info "  4. Select branch: ${sdk_version:-release}"
+            print_info "  4. Select branch: ${ios_sdk_ver:-release}"
             print_info "  5. Add the package to your app target"
             ;;
 
@@ -399,7 +434,7 @@ update_config_files() {
             fi
 
             # Update Android TrustArc SDK module/version if provided
-            if [ -n "$sdk_version" ]; then
+            if [ -n "$android_sdk_ver" ]; then
                 local android_versions_toml="$app_dir/gradle/libs.versions.toml"
                 if [ -f "$android_versions_toml" ]; then
                     local android_sample_env="${ANDROID_SAMPLE_SDK_ENV:-prod}"
@@ -407,11 +442,12 @@ update_config_files() {
                     if [ "$android_sample_env" != "prod" ]; then
                         android_module="com.trustarc:trustarc-consent-sdk-${android_sample_env}"
                     fi
-
+                    local escaped_android_sdk_ver
+                    escaped_android_sdk_ver=$(sed_escape_replacement "$android_sdk_ver")
                     sed -i.bak "s|^[[:space:]]*trustarc-consent-sdk[[:space:]]*=.*|trustarc-consent-sdk = { module = \"$android_module\", version.ref = \"trustarcConsentSdk\" }|" "$android_versions_toml"
-                    sed -i.bak "s|^[[:space:]]*trustarcConsentSdk[[:space:]]*=.*|trustarcConsentSdk = \"$escaped_sdk_version\"|" "$android_versions_toml"
+                    sed -i.bak "s|^[[:space:]]*trustarcConsentSdk[[:space:]]*=.*|trustarcConsentSdk = \"$escaped_android_sdk_ver\"|" "$android_versions_toml"
                     rm -f "${android_versions_toml}.bak"
-                    print_success "Updated Android TrustArc SDK module/version: $android_module:$sdk_version"
+                    print_success "Updated Android TrustArc SDK module/version: $android_module:$android_sdk_ver"
                 else
                     print_warning "Android version catalog not found; skipped SDK version override"
                 fi
@@ -455,12 +491,12 @@ update_config_files() {
             fi
 
             # Update React Native TrustArc SDK package version if provided
-            if [ -n "$sdk_version" ]; then
+            if [ -n "$rn_sdk_ver" ]; then
                 local rn_package_json="$app_dir/package.json"
                 if [ -f "$rn_package_json" ]; then
-                    sed -i.bak "s|\"@trustarc/trustarc-react-native-consent-sdk\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"@trustarc/trustarc-react-native-consent-sdk\": \"$sdk_version\"|g" "$rn_package_json"
+                    sed -i.bak "s|\"@trustarc/trustarc-react-native-consent-sdk\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"@trustarc/trustarc-react-native-consent-sdk\": \"$rn_sdk_ver\"|g" "$rn_package_json"
                     rm -f "${rn_package_json}.bak"
-                    print_success "Updated React Native TrustArc SDK version: $sdk_version"
+                    print_success "Updated React Native TrustArc SDK version: $rn_sdk_ver"
                 else
                     print_warning "React Native package.json not found; skipped SDK version override"
                 fi
@@ -510,10 +546,10 @@ update_config_files() {
             fi
 
             # Update Flutter TrustArc SDK ref tag if provided
-            if [ -n "$sdk_version" ] && [ -f "$flutter_pubspec" ]; then
-                sed -i.bak "s|^[[:space:]]*ref:[[:space:]].*|      ref: $sdk_version|g" "$flutter_pubspec"
+            if [ -n "$flutter_sdk_ver" ] && [ -f "$flutter_pubspec" ]; then
+                sed -i.bak "s|^[[:space:]]*ref:[[:space:]].*|      ref: $flutter_sdk_ver|g" "$flutter_pubspec"
                 rm -f "${flutter_pubspec}.bak"
-                print_success "Updated Flutter TrustArc SDK version tag: $sdk_version"
+                print_success "Updated Flutter TrustArc SDK version tag: $flutter_sdk_ver"
             fi
 
             # Update Flutter iOS Podfile with token
@@ -617,8 +653,12 @@ download_sample_app() {
     print_info "  Platform: $platform_type"
     print_info "  Domain: $domain"
     print_info "  Website: $website"
-    if [ -n "$sdk_version" ]; then
+    if [ "$sdk_version" = "release" ] || [ "$sdk_version" = "stable" ]; then
+        print_info "  SDK Channel: $sdk_version"
+    elif [ -n "$sdk_version" ]; then
         print_info "  SDK Version Override: $sdk_version"
+    else
+        print_info "  SDK Channel: release (default)"
     fi
     echo ""
     print_info "Downloading sample application from GitHub..."
