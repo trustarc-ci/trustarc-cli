@@ -1,60 +1,52 @@
 #!/bin/bash
-
-# TrustArc CLI — Go Edition (golang-migration branch)
-#
-# Usage:
-#   REPO_REF=golang-migration sh -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
-# or directly:
-#   APP_VERSION=feature/... sh -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/golang-migration/install.sh)"
-
 set -e
 
-BRANCH="golang-migration"
 REPO="trustarc-ci/trustarc-cli"
+TAG="golang-migration-latest"
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-# ── check Go ─────────────────────────────────────────────────────────────────
-if ! command -v go >/dev/null 2>&1; then
-  echo "Error: Go is required to run the CLI on the golang-migration branch."
-  echo ""
-  echo "Install Go from https://go.dev/dl/ and re-run, or use the stable shell version:"
-  echo "  sh -c \"\$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)\""
-  exit 1
-fi
+# ── detect OS / arch ──────────────────────────────────────────────────────────
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
 
-GO_VERSION=$(go version | awk '{print $3}')
-echo "→ TrustArc CLI  (Go Edition · branch: $BRANCH)"
-echo "  Go: $GO_VERSION"
+case "$ARCH" in
+  x86_64)        ARCH="amd64" ;;
+  aarch64|arm64) ARCH="arm64" ;;
+  *)
+    echo "Error: unsupported architecture: $ARCH"
+    exit 1
+    ;;
+esac
+
+case "$OS" in
+  darwin|linux) ;;
+  *)
+    echo "Error: unsupported OS: $OS (Windows is not supported)"
+    exit 1
+    ;;
+esac
+
+# ── download binary ───────────────────────────────────────────────────────────
+BINARY_URL="https://github.com/${REPO}/releases/download/${TAG}/trustarc-cli-${OS}-${ARCH}"
+BINARY="$TMP_DIR/trustarc-cli"
+
+echo "→ TrustArc CLI  (Go Edition)"
+echo "  Platform: ${OS}/${ARCH}"
 echo ""
-
-# ── download source ───────────────────────────────────────────────────────────
-echo "→ Downloading source..."
-
-SRC_DIR="$TMP_DIR/src"
-mkdir -p "$SRC_DIR"
-
-ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
+echo "→ Downloading..."
 
 if command -v curl >/dev/null 2>&1; then
-  curl -fsSL "$ARCHIVE_URL" | tar xz -C "$SRC_DIR"
+  curl -fsSL "$BINARY_URL" -o "$BINARY"
 elif command -v wget >/dev/null 2>&1; then
-  wget -qO- "$ARCHIVE_URL" | tar xz -C "$SRC_DIR"
+  wget -qO "$BINARY" "$BINARY_URL"
 else
   echo "Error: curl or wget is required."
   exit 1
 fi
 
-EXTRACTED=$(ls "$SRC_DIR" | head -1)
-BUILD_DIR="$SRC_DIR/$EXTRACTED"
-BINARY="$TMP_DIR/trustarc-cli"
-
-# ── build ─────────────────────────────────────────────────────────────────────
-echo "→ Building..."
-cd "$BUILD_DIR"
-go mod tidy -e 2>/dev/null || true
-go build -ldflags="-s -w" -o "$BINARY" ./cmd/
-echo "✓ Build complete"
+chmod +x "$BINARY"
+echo "✓ Ready"
 echo ""
 
 # ── run ───────────────────────────────────────────────────────────────────────
