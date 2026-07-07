@@ -15,15 +15,19 @@ jobs:
           - goos: darwin
             goarch: arm64
             runner: macos-latest
+            ldflags: "-w"
           - goos: darwin
             goarch: amd64
             runner: macos-latest
+            ldflags: "-w"
           - goos: linux
             goarch: amd64
             runner: ubuntu-latest
+            ldflags: "-s -w"
           - goos: linux
             goarch: arm64
             runner: ubuntu-latest
+            ldflags: "-s -w"
 
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +40,7 @@ jobs:
         run: |
           go mod tidy
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-            go build -ldflags="-s -w" -o trustarc-cli-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/
+            go build -ldflags="${{ matrix.ldflags }}" -o trustarc-cli-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/
 
       - uses: actions/upload-artifact@v4
         with:
