@@ -42,6 +42,10 @@ REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/h
 # Set TRUSTARC_USE_LOCAL_MODULES=1 to use local files during development.
 USE_LOCAL_MODULES="${TRUSTARC_USE_LOCAL_MODULES:-0}"
 
+# Auth token for GitHub raw content (reduces rate limiting from IP-based to token-based limits).
+# Uses TRUSTARC_TOKEN if set in the environment before running the installer.
+_RAW_AUTH_TOKEN="${TRUSTARC_TOKEN:-}"
+
 # Temporary directory for downloaded modules
 TMP_LIB_DIR="/tmp/trustarc-cli-lib-$$"
 
@@ -49,9 +53,7 @@ TMP_LIB_DIR="/tmp/trustarc-cli-lib-$$"
 load_module() {
     local module_name=$1
     local module_path="lib/${module_name}.sh"
-    local cache_buster
-    cache_buster="$(date +%s%N)-$$-$RANDOM"
-    local module_url="${REPO_BASE_URL}/${module_path}?cb=${cache_buster}"
+    local module_url="${REPO_BASE_URL}/${module_path}"
 
     # Optional local module mode for development.
     if [ "$USE_LOCAL_MODULES" = "1" ] && [ -f "$(dirname "$0")/${module_path}" ]; then
@@ -63,31 +65,54 @@ load_module() {
     # Create temp directory if it doesn't exist
     mkdir -p "$TMP_LIB_DIR"
 
-    # Download module to temp directory
+    # Download module to temp directory with retry/backoff to handle GitHub rate limits
     local local_module="$TMP_LIB_DIR/${module_name}.sh"
+    local max_attempts=5
+    local attempt=1
+    local delay=2
 
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL \
-            -H "Cache-Control: no-cache, no-store, must-revalidate" \
-            -H "Pragma: no-cache" \
-            -H "Expires: 0" \
-            "$module_url" -o "$local_module" 2>/dev/null
-    elif command -v wget >/dev/null 2>&1; then
-        wget -q --no-cache \
-            --header="Cache-Control: no-cache, no-store, must-revalidate" \
-            --header="Pragma: no-cache" \
-            --header="Expires: 0" \
-            "$module_url" -O "$local_module" 2>/dev/null
-    else
-        echo "Error: Neither curl nor wget is available. Please install one of them."
-        exit 1
-    fi
+    while [ $attempt -le $max_attempts ]; do
+        local http_status=0
+        if command -v curl >/dev/null 2>&1; then
+            local auth_args=()
+            [ -n "$_RAW_AUTH_TOKEN" ] && auth_args=(-H "Authorization: token ${_RAW_AUTH_TOKEN}")
+            http_status=$(curl -fsSL --retry 0 -w "%{http_code}" \
+                "${auth_args[@]}" \
+                "$module_url" -o "$local_module" 2>/dev/null)
+        elif command -v wget >/dev/null 2>&1; then
+            local auth_header=""
+            [ -n "$_RAW_AUTH_TOKEN" ] && auth_header="--header=Authorization: token ${_RAW_AUTH_TOKEN}"
+            wget -q ${auth_header:+"$auth_header"} "$module_url" -O "$local_module" 2>/dev/null
+            http_status=$?
+            # wget exits 0 on success; map to pseudo HTTP code for uniform handling
+            [ "$http_status" = "0" ] && http_status=200 || http_status=500
+        else
+            echo "Error: Neither curl nor wget is available. Please install one of them."
+            exit 1
+        fi
+
+        if [ -s "$local_module" ] && [ "$http_status" != "429" ]; then
+            break
+        fi
+
+        if [ "$http_status" = "429" ]; then
+            echo "[WARN] GitHub rate limit hit fetching ${module_name} (attempt ${attempt}/${max_attempts}). Retrying in ${delay}s..."
+        else
+            echo "[WARN] Failed to download ${module_name} (attempt ${attempt}/${max_attempts}). Retrying in ${delay}s..."
+        fi
+
+        rm -f "$local_module"
+        attempt=$((attempt + 1))
+        [ $attempt -le $max_attempts ] && sleep $delay
+        delay=$((delay * 2))
+    done
 
     # Source the downloaded module
-    if [ -f "$local_module" ]; then
+    if [ -f "$local_module" ] && [ -s "$local_module" ]; then
         source "$local_module"
     else
-        echo "Error: Failed to download module: $module_name"
+        echo "Error: Failed to download module after ${max_attempts} attempts: $module_name"
+        echo "Tip: set TRUSTARC_TOKEN in your environment to avoid GitHub rate limits."
         exit 1
     fi
 }
