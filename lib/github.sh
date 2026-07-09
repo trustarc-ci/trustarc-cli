@@ -311,7 +311,8 @@ fetch_android_sdk_versions_for_artifact() {
     fi
 
     printf "%s\n" "$response" \
-        | sed -n 's:.*<version>\([^<]*\)</version>.*:\1:p' \
+        | grep -o '<version>[^<]*</version>' \
+        | sed 's:<version>::;s:</version>::' \
         | sort -Vr
 }
 

@@ -190,7 +190,8 @@ filter_tags_for_platform_stream() {
 
     case "$stream" in
         current)
-            grep -v -- "-dev" | grep -v -- "-qa" | grep -v -- "-staging" | grep -v -- "-stage"
+            grep -v -- "-dev" | grep -v -- "-qa" | grep -v -- "-staging" | grep -v -- "-stage" \
+                | grep -v "^v" | grep -v "^keep/"
             ;;
         stable)
             filter_stable_2026_01_versions
@@ -232,7 +233,7 @@ list_sample_sdk_versions() {
             fi
             ;;
         ios|ios-spm|flutter)
-            fetch_repo_tags "trustarc/trustarc-mobile-consent" | filter_tags_for_platform_stream "$platform" "$stream" | sort -Vr | head -20
+            fetch_repo_tags "trustarc/trustarc-mobile-consent" | filter_tags_for_platform_stream "$platform" "$stream" | sort -Vr | head -5
             ;;
         *)
             return 1
@@ -327,6 +328,7 @@ select_sample_sdk_stream() {
         while IFS= read -r version; do
             [ -n "$version" ] && versions+=("$version")
         done <<< "$versions_raw"
+        print_info "Showing the ${#versions[@]} most recent $stream_label versions."
         if ! select_from_numbered_list "Select $stream_label SDK version:" "${versions[@]}"; then
             select_sample_sdk_stream "$platform"
             return $?
@@ -582,38 +584,13 @@ update_config_files() {
     escaped_website=$(sed_escape_replacement "$website")
     escaped_token=$(sed_escape_replacement "$TRUSTARC_TOKEN")
 
-    # Resolve per-platform SDK versions from the ccm-mobile-preview versions JSON
-    # when sdk_version is a channel name ("release"/"stable") or empty.
+    # Per-platform SDK versions are resolved by select_sample_sdk_stream() before this
+    # point and stored in platform-specific variables. Fall back to sdk_version if unset.
     local ios_sdk_ver android_sdk_ver rn_sdk_ver flutter_sdk_ver
-    if [ "$sdk_version" = "release" ] || [ "$sdk_version" = "stable" ] || [ -z "$sdk_version" ]; then
-        local sdk_channel="${sdk_version:-release}"
-        local _sdk_json="/tmp/trustarc-sdk-versions-$$.json"
-        local _sdk_fetched=0
-        if command -v curl >/dev/null 2>&1; then
-            curl -fsSL "https://ccm-mobile-preview.vercel.app/docs/sdk-versions.json" -o "$_sdk_json" 2>/dev/null && _sdk_fetched=1 || true
-        elif command -v wget >/dev/null 2>&1; then
-            wget -q "https://ccm-mobile-preview.vercel.app/docs/sdk-versions.json" -O "$_sdk_json" 2>/dev/null && _sdk_fetched=1 || true
-        fi
-        if [ "$_sdk_fetched" -eq 1 ] && [ -s "$_sdk_json" ] && command -v python3 >/dev/null 2>&1; then
-            ios_sdk_ver=$(JSON_FILE="$_sdk_json" CHANNEL="$sdk_channel" FIELD="ios"         python3 -c "import json,os; d=json.load(open(os.environ['JSON_FILE'])); print(d.get(os.environ['CHANNEL'],{}).get(os.environ['FIELD'],''))" 2>/dev/null || echo "$sdk_channel")
-            android_sdk_ver=$(JSON_FILE="$_sdk_json" CHANNEL="$sdk_channel" FIELD="android"     python3 -c "import json,os; d=json.load(open(os.environ['JSON_FILE'])); print(d.get(os.environ['CHANNEL'],{}).get(os.environ['FIELD'],''))" 2>/dev/null || echo "")
-            rn_sdk_ver=$(JSON_FILE="$_sdk_json" CHANNEL="$sdk_channel" FIELD="reactNative"  python3 -c "import json,os; d=json.load(open(os.environ['JSON_FILE'])); print(d.get(os.environ['CHANNEL'],{}).get(os.environ['FIELD'],''))" 2>/dev/null || echo "")
-            flutter_sdk_ver=$(JSON_FILE="$_sdk_json" CHANNEL="$sdk_channel" FIELD="flutter"     python3 -c "import json,os; d=json.load(open(os.environ['JSON_FILE'])); print(d.get(os.environ['CHANNEL'],{}).get(os.environ['FIELD'],''))" 2>/dev/null || echo "$sdk_channel")
-            rm -f "$_sdk_json"
-        else
-            rm -f "$_sdk_json" 2>/dev/null
-            ios_sdk_ver="$sdk_channel"
-            android_sdk_ver=""
-            rn_sdk_ver=""
-            flutter_sdk_ver="$sdk_channel"
-        fi
-    else
-        # Explicit version override (e.g. a specific dev tag) — iOS/Flutter use it as-is
-        ios_sdk_ver="$sdk_version"
-        android_sdk_ver="$sdk_version"
-        rn_sdk_ver="$sdk_version"
-        flutter_sdk_ver="$sdk_version"
-    fi
+    ios_sdk_ver="${IOS_SAMPLE_SDK_VERSION:-$sdk_version}"
+    android_sdk_ver="${ANDROID_SAMPLE_SDK_VERSION:-$sdk_version}"
+    rn_sdk_ver="${REACT_SAMPLE_SDK_VERSION:-$sdk_version}"
+    flutter_sdk_ver="${FLUTTER_SAMPLE_SDK_VERSION:-$sdk_version}"
 
     echo ""
     print_info "Updating configuration files..."
