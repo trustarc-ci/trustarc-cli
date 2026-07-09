@@ -293,3 +293,110 @@ fetch_latest_react_native_sdk_version() {
 fetch_latest_mobile_consent_tag() {
     fetch_latest_repo_tag "trustarc/trustarc-mobile-consent"
 }
+
+# Fetch all Maven versions for a TrustArc Android artifact.
+fetch_android_sdk_versions_for_artifact() {
+    local artifact=$1
+    local metadata_url="https://maven.pkg.github.com/trustarc/trustarc-mobile-consent/com/trustarc/${artifact}/maven-metadata.xml"
+    local response=""
+
+    [ -n "$TRUSTARC_TOKEN" ] || return 1
+
+    if command -v curl >/dev/null 2>&1; then
+        response=$(curl -fsSL -u "trustarc-ci:$TRUSTARC_TOKEN" "$metadata_url" 2>/dev/null) || return 1
+    elif command -v wget >/dev/null 2>&1; then
+        response=$(wget -qO- --user="trustarc-ci" --password="$TRUSTARC_TOKEN" "$metadata_url" 2>/dev/null) || return 1
+    else
+        return 1
+    fi
+
+    printf "%s\n" "$response" \
+        | sed -n 's:.*<version>\([^<]*\)</version>.*:\1:p' \
+        | sort -Vr
+}
+
+# Fetch all published versions for a GitHub npm package such as
+# @trustarc/trustarc-react-native-consent-sdk-dev.
+fetch_npm_package_versions() {
+    local package_name=$1
+    local encoded_package
+    local package_url
+    local response=""
+
+    [ -n "$TRUSTARC_TOKEN" ] || return 1
+
+    encoded_package=$(printf "%s" "$package_name" | sed 's|/|%2f|g')
+    package_url="https://npm.pkg.github.com/${encoded_package}"
+
+    if command -v curl >/dev/null 2>&1; then
+        response=$(curl -fsSL \
+            -H "Accept: application/json" \
+            -H "Authorization: Bearer $TRUSTARC_TOKEN" \
+            "$package_url" 2>/dev/null) || return 1
+    elif command -v wget >/dev/null 2>&1; then
+        response=$(wget -qO- \
+            --header="Accept: application/json" \
+            --header="Authorization: Bearer $TRUSTARC_TOKEN" \
+            "$package_url" 2>/dev/null) || return 1
+    else
+        return 1
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        printf "%s" "$response" | python3 -c '
+import json
+import sys
+
+data = json.load(sys.stdin)
+for version in sorted(data.get("versions", {}).keys(), reverse=True):
+    print(version)
+'
+    else
+        printf "%s\n" "$response" \
+            | sed 's/"versions"[[:space:]]*:[[:space:]]*{/\n"versions":{/; s/,"time"[[:space:]]*:.*//' \
+            | sed -n 's/.*"\([^"]*\)"[[:space:]]*:[[:space:]]*{.*/\1/p' \
+            | sort -Vr
+    fi
+}
+
+# Fetch repository tag names. Pages are capped to avoid long interactive waits.
+fetch_repo_tags() {
+    local repo=$1
+    local page=1
+    local api_url=""
+    local response=""
+
+    while [ "$page" -le 5 ]; do
+        api_url="https://api.github.com/repos/${repo}/tags?per_page=100&page=${page}"
+
+        if command -v curl >/dev/null 2>&1; then
+            if [ -n "$TRUSTARC_TOKEN" ]; then
+                response=$(curl -fsSL \
+                    -H "Accept: application/vnd.github+json" \
+                    -H "Authorization: Bearer $TRUSTARC_TOKEN" \
+                    "$api_url" 2>/dev/null) || return 1
+            else
+                response=$(curl -fsSL \
+                    -H "Accept: application/vnd.github+json" \
+                    "$api_url" 2>/dev/null) || return 1
+            fi
+        elif command -v wget >/dev/null 2>&1; then
+            if [ -n "$TRUSTARC_TOKEN" ]; then
+                response=$(wget -qO- \
+                    --header="Accept: application/vnd.github+json" \
+                    --header="Authorization: Bearer $TRUSTARC_TOKEN" \
+                    "$api_url" 2>/dev/null) || return 1
+            else
+                response=$(wget -qO- \
+                    --header="Accept: application/vnd.github+json" \
+                    "$api_url" 2>/dev/null) || return 1
+            fi
+        else
+            return 1
+        fi
+
+        [ "$response" != "[]" ] || break
+        printf "%s\n" "$response" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+        page=$((page + 1))
+    done
+}

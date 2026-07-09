@@ -100,6 +100,278 @@ sed_escape_replacement() {
     printf '%s' "$1" | sed -e 's/[\\|&]/\\&/g'
 }
 
+sample_stream_to_env() {
+    local stream=$1
+
+    case "$stream" in
+        current) echo "prod" ;;
+        stable) echo "stable" ;;
+        stage) echo "staging" ;;
+        qa) echo "qa" ;;
+        dev) echo "dev" ;;
+        *) return 1 ;;
+    esac
+}
+
+sample_stream_label() {
+    local stream=$1
+
+    case "$stream" in
+        current) echo "Current" ;;
+        stable) echo "Stable" ;;
+        stage) echo "Stage" ;;
+        qa) echo "QA" ;;
+        dev) echo "Dev" ;;
+        *) echo "$stream" ;;
+    esac
+}
+
+android_artifact_for_stream() {
+    local stream=$1
+
+    case "$stream" in
+        current) echo "trustarc-consent-sdk" ;;
+        stable) echo "trustarc-consent-sdk-stable" ;;
+        stage) echo "trustarc-consent-sdk-staging" ;;
+        qa) echo "trustarc-consent-sdk-qa" ;;
+        dev) echo "trustarc-consent-sdk-dev" ;;
+        *) return 1 ;;
+    esac
+}
+
+react_package_for_stream() {
+    local stream=$1
+
+    case "$stream" in
+        current|stable) echo "@trustarc/trustarc-react-native-consent-sdk" ;;
+        stage) echo "@trustarc/trustarc-react-native-consent-sdk-staging" ;;
+        qa) echo "@trustarc/trustarc-react-native-consent-sdk-qa" ;;
+        dev) echo "@trustarc/trustarc-react-native-consent-sdk-dev" ;;
+        *) return 1 ;;
+    esac
+}
+
+filter_stable_2026_01_versions() {
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c '
+import re
+import sys
+
+matches = []
+for raw in sys.stdin:
+    value = raw.strip()
+    match = re.search(r"2026\.0?1\.(\d+)$", value)
+    if match and int(match.group(1)) > 3:
+        matches.append(value)
+
+for value in matches:
+    print(value)
+'
+    else
+        awk '
+            match($0, /2026\.0?1\.([0-9]+)$/, m) {
+                if (m[1] + 0 > 3) print
+            }
+        '
+    fi
+}
+
+filter_tags_for_platform_stream() {
+    local platform=$1
+    local stream=$2
+    local platform_key=""
+    local env_key=""
+
+    case "$platform" in
+        ios|ios-spm) platform_key="ios" ;;
+        flutter) platform_key="flutter" ;;
+        *) cat; return 0 ;;
+    esac
+
+    case "$stream" in
+        current)
+            grep -v -- "-dev" | grep -v -- "-qa" | grep -v -- "-staging" | grep -v -- "-stage"
+            ;;
+        stable)
+            filter_stable_2026_01_versions
+            ;;
+        dev|qa)
+            env_key="$stream"
+            grep -- "-${platform_key}-${env_key}"
+            ;;
+        stage)
+            env_key="staging"
+            grep -- "-${platform_key}-${env_key}"
+            ;;
+        *)
+            cat
+            ;;
+    esac
+}
+
+list_sample_sdk_versions() {
+    local platform=$1
+    local stream=$2
+    local env
+    local artifact
+    local package_name
+
+    env=$(sample_stream_to_env "$stream") || return 1
+
+    case "$platform" in
+        android)
+            artifact=$(android_artifact_for_stream "$stream") || return 1
+            fetch_android_sdk_versions_for_artifact "$artifact" | head -20
+            ;;
+        react-native|react-native-baremetal)
+            package_name=$(react_package_for_stream "$stream") || return 1
+            if [ "$stream" = "stable" ]; then
+                fetch_npm_package_versions "$package_name" | filter_stable_2026_01_versions | sort -Vr | head -20
+            else
+                fetch_npm_package_versions "$package_name" | sort -Vr | head -20
+            fi
+            ;;
+        ios|ios-spm|flutter)
+            fetch_repo_tags "trustarc/trustarc-mobile-consent" | filter_tags_for_platform_stream "$platform" "$stream" | sort -Vr | head -20
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+select_from_numbered_list() {
+    local prompt=$1
+    shift
+    local values=("$@")
+    local choice=""
+    local index=0
+
+    [ "${#values[@]}" -gt 0 ] || return 1
+    SELECTED_NUMBERED_VALUE=""
+
+    echo ""
+    print_info "$prompt"
+    for index in "${!values[@]}"; do
+        printf "  ${BOLD}%s${NC}) %s\n" "$((index + 1))" "${values[$index]}"
+    done
+    echo ""
+
+    while true; do
+        read -p "Enter your choice (1-${#values[@]}): " choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#values[@]}" ]; then
+            SELECTED_NUMBERED_VALUE="${values[$((choice - 1))]}"
+            return 0
+        fi
+        print_error "Invalid choice"
+    done
+}
+
+select_sample_sdk_stream() {
+    local platform=$1
+    local default_stream="${SDK_STREAM:-current}"
+    local default_choice="1"
+    local stream_choice=""
+    local stream=""
+    local stream_label=""
+    local versions_raw=""
+    local selected_version=""
+    local env=""
+    local artifact=""
+    local package_name=""
+    local version=""
+
+    case "$default_stream" in
+        current) default_choice="1" ;;
+        stable) default_choice="2" ;;
+        stage) default_choice="3" ;;
+        qa) default_choice="4" ;;
+        dev) default_choice="5" ;;
+    esac
+
+    echo ""
+    echo "Select SDK stream:"
+    echo ""
+    printf "  ${BOLD}1${NC}) Current\n"
+    printf "  ${BOLD}2${NC}) Stable\n"
+    printf "  ${BOLD}3${NC}) Stage\n"
+    printf "  ${BOLD}4${NC}) QA\n"
+    printf "  ${BOLD}5${NC}) Dev\n"
+    echo ""
+    read -p "Enter your choice (1-5, default: $default_choice): " stream_choice
+    stream_choice=${stream_choice:-$default_choice}
+
+    case "$stream_choice" in
+        1) stream="current" ;;
+        2) stream="stable" ;;
+        3) stream="stage" ;;
+        4) stream="qa" ;;
+        5) stream="dev" ;;
+        *) print_error "Invalid SDK stream"; select_sample_sdk_stream "$platform"; return ;;
+    esac
+
+    save_config "SDK_STREAM" "$stream"
+    SDK_STREAM="$stream"
+    stream_label=$(sample_stream_label "$stream")
+
+    print_info "Fetching $stream_label versions..."
+    versions_raw=$(list_sample_sdk_versions "$platform" "$stream" 2>/dev/null || true)
+
+    if [ -n "$versions_raw" ]; then
+        local versions=()
+        while IFS= read -r version; do
+            [ -n "$version" ] && versions+=("$version")
+        done <<< "$versions_raw"
+        select_from_numbered_list "Select $stream_label SDK version:" "${versions[@]}"
+        selected_version="$SELECTED_NUMBERED_VALUE"
+    else
+        print_warning "Could not fetch versions for $stream_label. Falling back to manual entry."
+        read -p "Enter SDK version/ref: " selected_version
+        while [ -z "$selected_version" ]; do
+            print_error "SDK version/ref cannot be empty."
+            read -p "Enter SDK version/ref: " selected_version
+        done
+    fi
+
+    env=$(sample_stream_to_env "$stream")
+    SAMPLE_SDK_STREAM="$stream"
+    SAMPLE_SDK_VERSION="$selected_version"
+
+    case "$platform" in
+        android)
+            artifact=$(android_artifact_for_stream "$stream")
+            ANDROID_SAMPLE_SDK_ENV="$env"
+            ANDROID_SAMPLE_SDK_MODULE="com.trustarc:${artifact}"
+            ANDROID_SAMPLE_SDK_VERSION="$selected_version"
+            save_config "ANDROID_SAMPLE_SDK_ENV" "$env"
+            save_config "ANDROID_SAMPLE_SDK_VERSION" "$selected_version"
+            ;;
+        react-native|react-native-baremetal)
+            package_name=$(react_package_for_stream "$stream")
+            REACT_SAMPLE_SDK_ENV="$env"
+            if [ "$stream" = "current" ] || [ "$stream" = "stable" ]; then
+                SAMPLE_SDK_VERSION="$selected_version"
+                REACT_SAMPLE_SDK_VERSION="$selected_version"
+            else
+                SAMPLE_SDK_VERSION="npm:${package_name}@${selected_version}"
+                REACT_SAMPLE_SDK_VERSION="$SAMPLE_SDK_VERSION"
+            fi
+            save_config "REACT_SAMPLE_SDK_ENV" "$env"
+            save_config "REACT_SAMPLE_SDK_VERSION" "$REACT_SAMPLE_SDK_VERSION"
+            ;;
+        ios|ios-spm)
+            IOS_SAMPLE_SDK_VERSION="$selected_version"
+            save_config "IOS_SAMPLE_SDK_VERSION" "$selected_version"
+            ;;
+        flutter)
+            FLUTTER_SAMPLE_SDK_VERSION="$selected_version"
+            save_config "FLUTTER_SAMPLE_SDK_VERSION" "$selected_version"
+            ;;
+    esac
+
+    print_success "Selected $stream_label SDK version: $selected_version"
+}
+
 detect_android_sdk() {
     local candidates=()
 
@@ -438,8 +710,8 @@ update_config_files() {
                 local android_versions_toml="$app_dir/gradle/libs.versions.toml"
                 if [ -f "$android_versions_toml" ]; then
                     local android_sample_env="${ANDROID_SAMPLE_SDK_ENV:-prod}"
-                    local android_module="com.trustarc:trustarc-consent-sdk"
-                    if [ "$android_sample_env" != "prod" ]; then
+                    local android_module="${ANDROID_SAMPLE_SDK_MODULE:-com.trustarc:trustarc-consent-sdk}"
+                    if [ -z "${ANDROID_SAMPLE_SDK_MODULE:-}" ] && [ "$android_sample_env" != "prod" ]; then
                         android_module="com.trustarc:trustarc-consent-sdk-${android_sample_env}"
                     fi
                     local escaped_android_sdk_ver
