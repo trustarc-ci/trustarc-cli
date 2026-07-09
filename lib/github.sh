@@ -360,15 +360,18 @@ for version in sorted(data.get("versions", {}).keys(), reverse=True):
     fi
 }
 
-# Fetch repository tag names. Pages are capped to avoid long interactive waits.
+# Fetch repository tag names.
+# $1: owner/repo  $2: max pages (default 1)  $3: per_page (default 100)
 fetch_repo_tags() {
     local repo=$1
+    local max_pages="${2:-1}"
+    local per_page="${3:-100}"
     local page=1
     local api_url=""
     local response=""
 
-    while [ "$page" -le 5 ]; do
-        api_url="https://api.github.com/repos/${repo}/tags?per_page=100&page=${page}"
+    while [ "$page" -le "$max_pages" ]; do
+        api_url="https://api.github.com/repos/${repo}/tags?per_page=${per_page}&page=${page}"
 
         if command -v curl >/dev/null 2>&1; then
             if [ -n "$TRUSTARC_TOKEN" ]; then
