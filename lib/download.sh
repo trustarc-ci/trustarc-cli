@@ -255,11 +255,14 @@ select_from_numbered_list() {
     for index in "${!values[@]}"; do
         printf "  ${BOLD}%s${NC}) %s\n" "$((index + 1))" "${values[$index]}"
     done
+    printf "  ${BOLD}%s${NC}) Back\n" "$((${#values[@]} + 1))"
     echo ""
 
     while true; do
-        read -p "Enter your choice (1-${#values[@]}): " choice
-        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#values[@]}" ]; then
+        read -p "Enter your choice (1-$((${#values[@]} + 1))): " choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -eq "$((${#values[@]} + 1))" ]; then
+            return 2
+        elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#values[@]}" ]; then
             SELECTED_NUMBERED_VALUE="${values[$((choice - 1))]}"
             return 0
         fi
@@ -297,8 +300,9 @@ select_sample_sdk_stream() {
     printf "  ${BOLD}3${NC}) Stage\n"
     printf "  ${BOLD}4${NC}) QA\n"
     printf "  ${BOLD}5${NC}) Dev\n"
+    printf "  ${BOLD}6${NC}) Back to platform selection\n"
     echo ""
-    read -p "Enter your choice (1-5, default: $default_choice): " stream_choice
+    read -p "Enter your choice (1-6, default: $default_choice): " stream_choice
     stream_choice=${stream_choice:-$default_choice}
 
     case "$stream_choice" in
@@ -307,6 +311,7 @@ select_sample_sdk_stream() {
         3) stream="stage" ;;
         4) stream="qa" ;;
         5) stream="dev" ;;
+        6) return 1 ;;
         *) print_error "Invalid SDK stream"; select_sample_sdk_stream "$platform"; return ;;
     esac
 
@@ -322,7 +327,10 @@ select_sample_sdk_stream() {
         while IFS= read -r version; do
             [ -n "$version" ] && versions+=("$version")
         done <<< "$versions_raw"
-        select_from_numbered_list "Select $stream_label SDK version:" "${versions[@]}"
+        if ! select_from_numbered_list "Select $stream_label SDK version:" "${versions[@]}"; then
+            select_sample_sdk_stream "$platform"
+            return $?
+        fi
         selected_version="$SELECTED_NUMBERED_VALUE"
     else
         print_warning "Could not fetch versions for $stream_label. Falling back to manual entry."

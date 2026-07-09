@@ -337,13 +337,13 @@ download_sample_menu() {
 
     echo "Select platform:"
     echo ""
-    echo "  ${BOLD}1${NC}) iOS (CocoaPods)"
-    echo "  ${BOLD}2${NC}) iOS (Swift Package Manager)"
-    echo "  ${BOLD}3${NC}) Android"
-    echo "  ${BOLD}4${NC}) React Native (Expo)"
-    echo "  ${BOLD}5${NC}) React Native (Bare Metal)"
-    echo "  ${BOLD}6${NC}) Flutter"
-    echo "  ${BOLD}7${NC}) Back to main menu"
+    printf "  ${BOLD}1${NC}) iOS (CocoaPods)\n"
+    printf "  ${BOLD}2${NC}) iOS (Swift Package Manager)\n"
+    printf "  ${BOLD}3${NC}) Android\n"
+    printf "  ${BOLD}4${NC}) React Native (Expo)\n"
+    printf "  ${BOLD}5${NC}) React Native (Bare Metal)\n"
+    printf "  ${BOLD}6${NC}) Flutter\n"
+    printf "  ${BOLD}7${NC}) Back to main menu\n"
     echo ""
 
     local default_platform_choice=""
@@ -404,7 +404,10 @@ download_sample_menu() {
     WEBSITE="$website"
 
     # Ask for SDK stream and version/ref.
-    select_sample_sdk_stream "$platform"
+    if ! select_sample_sdk_stream "$platform"; then
+        download_sample_menu
+        return
+    fi
     local sample_sdk_version="$SAMPLE_SDK_VERSION"
 
     # Download
