@@ -630,6 +630,15 @@ update_config_files() {
                 rm -f "${ios_podfile}.bak"
                 print_success "Updated iOS TrustArc SDK version tag: $ios_sdk_ver"
             fi
+
+            # Update on-screen SDK version label shown in the app UI
+            if [ -n "$ios_sdk_ver" ] && [ -f "$ios_config" ]; then
+                local ios_label
+                ios_label=$(sed_escape_replacement "TrustArcConsentSDK:${ios_sdk_ver}")
+                sed -i.bak "s|let sdkVersionLabel: String = AppConfig.readString(\"TRUSTARC_SDK_VERSION_LABEL\", fallback: \"[^\"]*\")|let sdkVersionLabel: String = AppConfig.readString(\"TRUSTARC_SDK_VERSION_LABEL\", fallback: \"$ios_label\")|" "$ios_config"
+                rm -f "${ios_config}.bak"
+                print_success "Updated iOS SDK version label: TrustArcConsentSDK:${ios_sdk_ver}"
+            fi
             ;;
 
         "ios-spm")
@@ -643,6 +652,15 @@ update_config_files() {
                 sed -i.bak "s|let testWebsiteUrl: String = \".*\"|let testWebsiteUrl: String = \"$escaped_website\"|" "$ios_spm_config"
                 rm -f "${ios_spm_config}.bak"
                 print_success "Updated iOS (SPM) AppConfig.swift"
+
+                # Update on-screen SDK version label shown in the app UI
+                if [ -n "$ios_sdk_ver" ]; then
+                    local ios_spm_label
+                    ios_spm_label=$(sed_escape_replacement "TrustArcConsentSDK:${ios_sdk_ver}")
+                    sed -i.bak "s|let sdkVersionLabel: String = AppConfig.readString(\"TRUSTARC_SDK_VERSION_LABEL\", fallback: \"[^\"]*\")|let sdkVersionLabel: String = AppConfig.readString(\"TRUSTARC_SDK_VERSION_LABEL\", fallback: \"$ios_spm_label\")|" "$ios_spm_config"
+                    rm -f "${ios_spm_config}.bak"
+                    print_success "Updated iOS (SPM) SDK version label: TrustArcConsentSDK:${ios_sdk_ver}"
+                fi
             else
                 print_warning "iOS AppConfig.swift not found in $app_dir"
             fi
@@ -705,6 +723,15 @@ update_config_files() {
                     sed -i.bak "s|^[[:space:]]*trustarcConsentSdk[[:space:]]*=.*|trustarcConsentSdk = \"$escaped_android_sdk_ver\"|" "$android_versions_toml"
                     rm -f "${android_versions_toml}.bak"
                     print_success "Updated Android TrustArc SDK module/version: $android_module:$android_sdk_ver"
+
+                    # Update on-screen SDK version label shown in the app UI
+                    if [ -f "$android_config" ]; then
+                        local android_label
+                        android_label=$(sed_escape_replacement "${android_module##*:}:${android_sdk_ver}")
+                        sed -i.bak "s|const val SDK_VERSION_LABEL: String = \".*\"|const val SDK_VERSION_LABEL: String = \"$android_label\"|" "$android_config"
+                        rm -f "${android_config}.bak"
+                        print_success "Updated Android SDK version label: ${android_module##*:}:${android_sdk_ver}"
+                    fi
                 else
                     print_warning "Android version catalog not found; skipped SDK version override"
                 fi
@@ -757,6 +784,16 @@ update_config_files() {
                 else
                     print_warning "React Native package.json not found; skipped SDK version override"
                 fi
+
+                # Update on-screen SDK version label shown in the app UI.
+                # rn_sdk_ver may be an "npm:<pkg>@<version>" alias; keep only the trailing version.
+                if [ -f "$rn_config" ]; then
+                    local rn_label
+                    rn_label=$(sed_escape_replacement "trustarc-react-native-consent-sdk:${rn_sdk_ver##*@}")
+                    sed -i.bak "s|sdkVersionLabel: \".*\"|sdkVersionLabel: \"$rn_label\"|" "$rn_config"
+                    rm -f "${rn_config}.bak"
+                    print_success "Updated React Native SDK version label: trustarc-react-native-consent-sdk:${rn_sdk_ver##*@}"
+                fi
             fi
             ;;
 
@@ -807,6 +844,16 @@ update_config_files() {
                 sed -i.bak "s|^[[:space:]]*ref:[[:space:]].*|      ref: $flutter_sdk_ver|g" "$flutter_pubspec"
                 rm -f "${flutter_pubspec}.bak"
                 print_success "Updated Flutter TrustArc SDK version tag: $flutter_sdk_ver"
+            fi
+
+            # Update on-screen SDK version label shown in the app UI
+            local flutter_app_config="$app_dir/lib/config/app_config.dart"
+            if [ -n "$flutter_sdk_ver" ] && [ -f "$flutter_app_config" ]; then
+                local flutter_label
+                flutter_label=$(sed_escape_replacement "flutter-trustarc-mobile-consent:${flutter_sdk_ver}")
+                sed -i.bak "s|_defaultSdkVersionLabel = \".*\"|_defaultSdkVersionLabel = \"$flutter_label\"|" "$flutter_app_config"
+                rm -f "${flutter_app_config}.bak"
+                print_success "Updated Flutter SDK version label: flutter-trustarc-mobile-consent:${flutter_sdk_ver}"
             fi
 
             # Update Flutter iOS Podfile with token
