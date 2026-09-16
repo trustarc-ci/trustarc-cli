@@ -183,7 +183,7 @@ filter_tags_for_platform_stream() {
     local env_key=""
 
     case "$platform" in
-        ios|ios-spm) platform_key="ios" ;;
+        ios|ios-spm|ios-v2) platform_key="ios" ;;
         flutter) platform_key="flutter" ;;
         *) cat; return 0 ;;
     esac
@@ -220,7 +220,7 @@ list_sample_sdk_versions() {
     env=$(sample_stream_to_env "$stream") || return 1
 
     case "$platform" in
-        android)
+        android|android-v2)
             artifact=$(android_artifact_for_stream "$stream") || return 1
             fetch_android_sdk_versions_for_artifact "$artifact" | head -20
             ;;
@@ -232,7 +232,7 @@ list_sample_sdk_versions() {
                 fetch_npm_package_versions "$package_name" | sort -Vr | head -20
             fi
             ;;
-        ios|ios-spm|flutter)
+        ios|ios-spm|ios-v2|flutter)
             fetch_repo_tags "trustarc/trustarc-mobile-consent" | filter_tags_for_platform_stream "$platform" "$stream" | sort -Vr | head -5
             ;;
         *)
@@ -348,7 +348,7 @@ select_sample_sdk_stream() {
     SAMPLE_SDK_VERSION="$selected_version"
 
     case "$platform" in
-        android)
+        android|android-v2)
             artifact=$(android_artifact_for_stream "$stream")
             ANDROID_SAMPLE_SDK_ENV="$env"
             ANDROID_SAMPLE_SDK_MODULE="com.trustarc:${artifact}"
@@ -369,7 +369,7 @@ select_sample_sdk_stream() {
             save_config "REACT_SAMPLE_SDK_ENV" "$env"
             save_config "REACT_SAMPLE_SDK_VERSION" "$REACT_SAMPLE_SDK_VERSION"
             ;;
-        ios|ios-spm)
+        ios|ios-spm|ios-v2)
             IOS_SAMPLE_SDK_VERSION="$selected_version"
             save_config "IOS_SAMPLE_SDK_VERSION" "$selected_version"
             ;;
@@ -419,6 +419,14 @@ check_platform_dependencies() {
     local has_android_sdk=0
 
     print_step "Checking dependencies for $platform..."
+
+    # v2 demos share the same toolchain as their v1 counterparts (iOS v2 uses CocoaPods via a
+    # local podspec; Android v2 is a standard Gradle project). Normalize so the checks below reuse
+    # the existing per-platform logic.
+    case "$platform" in
+        "ios-v2") platform="ios" ;;
+        "android-v2") platform="android" ;;
+    esac
 
     case "$platform" in
         "ios")
@@ -797,6 +805,63 @@ update_config_files() {
             fi
             ;;
 
+        "android-v2")
+            # v2 has no AppConfig/website file — the default test domain is an in-app Compose
+            # state constant in MainActivity.kt. Patch it so the app opens on the chosen domain.
+            local v2_android_main="$app_dir/app/src/main/java/com/trustarc/v2demo/MainActivity.kt"
+            if [ -n "$domain" ] && [ -f "$v2_android_main" ]; then
+                sed -E -i.bak "s|(var domain by rememberSaveable \{ mutableStateOf\(\")[^\"]*(\"\) \})|\1$escaped_domain\2|" "$v2_android_main"
+                rm -f "${v2_android_main}.bak"
+                print_success "Updated Android v2 default domain: $domain"
+            elif [ ! -f "$v2_android_main" ]; then
+                print_warning "Android v2 MainActivity.kt not found; skipped default domain override"
+            fi
+
+            # v2 consumes the published SDK from GitHub Packages (settings.gradle already wires the
+            # Maven repo via TRUSTARC_TOKEN). Patch the coordinate + version on the managed line in
+            # app/build.gradle. Stream selects the artifact (dev/qa/staging/…); default is dev.
+            if [ -n "$android_sdk_ver" ]; then
+                local v2_build_gradle="$app_dir/app/build.gradle"
+                if [ -f "$v2_build_gradle" ]; then
+                    local v2_android_module="${ANDROID_SAMPLE_SDK_MODULE:-com.trustarc:trustarc-consent-sdk-dev}"
+                    local escaped_v2_android_ver
+                    escaped_v2_android_ver=$(sed_escape_replacement "$android_sdk_ver")
+                    sed -E -i.bak "s|implementation ['\"]com\.trustarc:trustarc-consent-sdk[^'\"]*['\"]|implementation '${v2_android_module}:${escaped_v2_android_ver}'|" "$v2_build_gradle"
+                    rm -f "${v2_build_gradle}.bak"
+                    print_success "Updated Android v2 SDK dependency: ${v2_android_module}:${android_sdk_ver}"
+                else
+                    print_warning "Android v2 app/build.gradle not found; skipped SDK version override"
+                fi
+            fi
+            ;;
+
+        "ios-v2")
+            # v2 has no AppConfig/website file — the default test domain is a SwiftUI @State
+            # constant in ContentView.swift. Patch it so the app opens on the chosen domain.
+            local v2_ios_content=$(find "$app_dir" -name "ContentView.swift" 2>/dev/null | head -1)
+            if [ -n "$domain" ] && [ -f "$v2_ios_content" ]; then
+                sed -E -i.bak "s|(@State private var domain = \")[^\"]*(\")|\1$escaped_domain\2|" "$v2_ios_content"
+                rm -f "${v2_ios_content}.bak"
+                print_success "Updated iOS v2 default domain: $domain"
+            elif [ -z "$v2_ios_content" ]; then
+                print_warning "iOS v2 ContentView.swift not found; skipped default domain override"
+            fi
+
+            # v2 consumes the published SDK from the trustarc-mobile-consent git repo (same as v1):
+            # pod 'TrustArcConsentSDK', :git => ..., :tag => '<version>'. Patch the tag.
+            local v2_ios_podfile="$app_dir/Podfile"
+            if [ -n "$ios_sdk_ver" ] && [ -f "$v2_ios_podfile" ]; then
+                local escaped_v2_ios_ver
+                escaped_v2_ios_ver=$(sed_escape_replacement "$ios_sdk_ver")
+                sed -E -i.bak "/pod[[:space:]]+['\"]TrustArcConsentSDK['\"]/ s|:tag[[:space:]]*=>[[:space:]]*['\"][^'\"]*['\"]|:tag => '$escaped_v2_ios_ver'|g" "$v2_ios_podfile"
+                rm -f "${v2_ios_podfile}.bak"
+                print_success "Updated iOS v2 SDK dependency tag: $ios_sdk_ver"
+            elif [ ! -f "$v2_ios_podfile" ]; then
+                print_warning "iOS v2 Podfile not found; skipped SDK version override"
+            fi
+            print_info "Run 'pod install' before building (or use the Build v2 menu, which does it for you)."
+            ;;
+
         "flutter")
             # Update Flutter .env file
             local flutter_env="$app_dir/.env"
@@ -916,6 +981,14 @@ download_sample_app() {
         "flutter")
             platform_type="flutter"
             platform_dir="flutter"
+            ;;
+        "android-v2")
+            platform_type="android-v2"
+            platform_dir="v2/android"
+            ;;
+        "ios-v2")
+            platform_type="ios-v2"
+            platform_dir="v2/ios"
             ;;
     esac
 

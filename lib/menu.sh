@@ -17,10 +17,11 @@ show_main_menu() {
     printf "${BLUE}What would you like to do?${NC}\n\n"
     print_menu_option "1" "Integrate SDK into project"
     print_menu_option "2" "Download sample application"
-    print_menu_option "3" "Clean up (remove token and config)"
-    print_menu_option "4" "Exit"
+    print_menu_option "3" "Build v2 sample application (APK / IPA / APP)"
+    print_menu_option "4" "Clean up (remove token and config)"
+    print_menu_option "5" "Exit"
     echo ""
-    read -p $'\033[0;34mEnter your choice (1-4): \033[0m' main_choice
+    read -p $'\033[0;34mEnter your choice (1-5): \033[0m' main_choice
 
     case "$main_choice" in
         1)
@@ -30,9 +31,12 @@ show_main_menu() {
             download_sample_menu
             ;;
         3)
-            cleanup_trustarc
+            build_v2_menu
             ;;
         4)
+            cleanup_trustarc
+            ;;
+        5)
             echo ""
             print_info "Configuration saved to: $CONFIG_FILE"
             print_substep "Run option 4 to clean up when you no longer need it"
@@ -343,7 +347,9 @@ download_sample_menu() {
     printf "  ${BOLD}4${NC}) React Native (Expo)\n"
     printf "  ${BOLD}5${NC}) React Native (Bare Metal)\n"
     printf "  ${BOLD}6${NC}) Flutter\n"
-    printf "  ${BOLD}7${NC}) Back to main menu\n"
+    printf "  ${BOLD}7${NC}) Android (v2 · TrustArcWeb, libs baked in)\n"
+    printf "  ${BOLD}8${NC}) iOS (v2 · TrustArcWeb, libs baked in)\n"
+    printf "  ${BOLD}9${NC}) Back to main menu\n"
     echo ""
 
     local default_platform_choice=""
@@ -354,13 +360,15 @@ download_sample_menu() {
         react-native) default_platform_choice="4" ;;
         react-native-baremetal) default_platform_choice="5" ;;
         flutter) default_platform_choice="6" ;;
+        android-v2) default_platform_choice="7" ;;
+        ios-v2) default_platform_choice="8" ;;
     esac
 
     if [ -n "$default_platform_choice" ]; then
-        read -p "Enter your choice (1-7, default: $default_platform_choice): " platform_choice
+        read -p "Enter your choice (1-9, default: $default_platform_choice): " platform_choice
         platform_choice=${platform_choice:-$default_platform_choice}
     else
-        read -p "Enter your choice (1-7): " platform_choice
+        read -p "Enter your choice (1-9): " platform_choice
     fi
 
     local platform=""
@@ -371,7 +379,9 @@ download_sample_menu() {
         4) platform="react-native" ;;
         5) platform="react-native-baremetal" ;;
         6) platform="flutter" ;;
-        7) show_main_menu; return ;;
+        7) platform="android-v2" ;;
+        8) platform="ios-v2" ;;
+        9) show_main_menu; return ;;
         *) print_error "Invalid choice"; download_sample_menu; return ;;
     esac
 
@@ -390,25 +400,36 @@ download_sample_menu() {
     save_config "MAC_DOMAIN" "$domain"
     MAC_DOMAIN="$domain"
 
-    # Ask for website
-    echo ""
-    if [ -n "$WEBSITE" ]; then
-        read -p "Enter website to load (default: $WEBSITE): " website
-        website=${website:-$WEBSITE}
-    else
-        read -p "Enter website to load (default: https://trustarc.com): " website
-        website=${website:-https://trustarc.com}
-    fi
-    website=$(normalize_https_url "$website")
-    save_config "WEBSITE" "$website"
-    WEBSITE="$website"
+    local website=""
+    local sample_sdk_version=""
 
-    # Ask for SDK stream and version/ref.
+    # Website config only applies to the v1 demos — the v2 apps have no testWebsiteUrl.
+    case "$platform" in
+        android-v2|ios-v2)
+            : # v2 has no website config; skip the website prompt
+            ;;
+        *)
+            echo ""
+            if [ -n "$WEBSITE" ]; then
+                read -p "Enter website to load (default: $WEBSITE): " website
+                website=${website:-$WEBSITE}
+            else
+                read -p "Enter website to load (default: https://trustarc.com): " website
+                website=${website:-https://trustarc.com}
+            fi
+            website=$(normalize_https_url "$website")
+            save_config "WEBSITE" "$website"
+            WEBSITE="$website"
+            ;;
+    esac
+
+    # SDK stream + version selection. v2 now consumes the published trustarc-mobile-consent
+    # dependency (same as v1), so it goes through the same version listing.
     if ! select_sample_sdk_stream "$platform"; then
         download_sample_menu
         return
     fi
-    local sample_sdk_version="$SAMPLE_SDK_VERSION"
+    sample_sdk_version="$SAMPLE_SDK_VERSION"
 
     # Download
     download_sample_app "$platform" "$domain" "$website" "$sample_sdk_version"
