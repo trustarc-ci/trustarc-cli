@@ -17,11 +17,10 @@ show_main_menu() {
     printf "${BLUE}What would you like to do?${NC}\n\n"
     print_menu_option "1" "Integrate SDK into project"
     print_menu_option "2" "Download sample application"
-    print_menu_option "3" "Build v2 sample application (APK / IPA / APP)"
-    print_menu_option "4" "Clean up (remove token and config)"
-    print_menu_option "5" "Exit"
+    print_menu_option "3" "Clean up (remove token and config)"
+    print_menu_option "4" "Exit"
     echo ""
-    read -p $'\033[0;34mEnter your choice (1-5): \033[0m' main_choice
+    read -p $'\033[0;34mEnter your choice (1-4): \033[0m' main_choice
 
     case "$main_choice" in
         1)
@@ -31,12 +30,9 @@ show_main_menu() {
             download_sample_menu
             ;;
         3)
-            build_v2_menu
-            ;;
-        4)
             cleanup_trustarc
             ;;
-        5)
+        4)
             echo ""
             print_info "Configuration saved to: $CONFIG_FILE"
             print_substep "Run option 4 to clean up when you no longer need it"
@@ -347,8 +343,8 @@ download_sample_menu() {
     printf "  ${BOLD}4${NC}) React Native (Expo)\n"
     printf "  ${BOLD}5${NC}) React Native (Bare Metal)\n"
     printf "  ${BOLD}6${NC}) Flutter\n"
-    printf "  ${BOLD}7${NC}) Android (v2 · TrustArcWeb, libs baked in)\n"
-    printf "  ${BOLD}8${NC}) iOS (v2 · TrustArcWeb, libs baked in)\n"
+    printf "  ${BOLD}7${NC}) Android (v2 · TrustArcWeb)\n"
+    printf "  ${BOLD}8${NC}) iOS (v2 · TrustArcWeb)\n"
     printf "  ${BOLD}9${NC}) Back to main menu\n"
     echo ""
 

@@ -859,7 +859,7 @@ update_config_files() {
             elif [ ! -f "$v2_ios_podfile" ]; then
                 print_warning "iOS v2 Podfile not found; skipped SDK version override"
             fi
-            print_info "Run 'pod install' before building (or use the Build v2 menu, which does it for you)."
+            print_info "Run 'pod install' in the app directory before building."
             ;;
 
         "flutter")
