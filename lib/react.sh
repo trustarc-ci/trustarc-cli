@@ -7,6 +7,18 @@
 # - React Native: >= 0.73.4
 # - Node.js: >= 18 (Expo + Bare Metal)
 
+# Append a line to a file only if a matching pattern is not already present.
+# $1 file, $2 grep pattern (ERE), $3 line to add, $4 human label
+ensure_npmrc_line() {
+    local file=$1 pattern=$2 line=$3 label=$4
+    if grep -qE "$pattern" "$file" 2>/dev/null; then
+        return 1  # already present
+    fi
+    echo "$line" >> "$file"
+    print_substep "Added $label"
+    return 0
+}
+
 # Configure .npmrc for TrustArc GitHub registry
 configure_npmrc() {
     local project_path=$1
@@ -18,61 +30,29 @@ configure_npmrc() {
     # Required configuration lines
     local registry_line="@trustarc:registry=https://npm.pkg.github.com"
     local auth_line="//npm.pkg.github.com/:_authToken=\${TRUSTARC_TOKEN}"
+    # legacy-peer-deps lets npm install the SDK despite its react peer range not
+    # matching newer Expo/React versions. Ignored by yarn/pnpm/bun. This also
+    # applies to npm installs spawned by `expo install`, `prebuild`, and `run`.
+    local legacy_line="legacy-peer-deps=true"
 
-    # Check if .npmrc exists
-    if [ -f "$npmrc_file" ]; then
-        print_info ".npmrc already exists"
-
-        # Check if TrustArc registry is already configured
-        local has_registry=false
-        local has_auth=false
-
-        if grep -q "^@trustarc:registry=" "$npmrc_file"; then
-            has_registry=true
-        fi
-
-        if grep -q "^//npm.pkg.github.com/:_authToken=" "$npmrc_file"; then
-            has_auth=true
-        fi
-
-        if [ "$has_registry" = true ] && [ "$has_auth" = true ]; then
-            print_success "TrustArc registry already configured in .npmrc"
-            return 0
-        fi
-
-        # Backup existing .npmrc
-        cp "$npmrc_file" "$npmrc_file.backup"
-        print_substep "Created backup: .npmrc.backup"
-
-        # Add missing lines
-        if [ "$has_registry" = false ]; then
-            echo "$registry_line" >> "$npmrc_file"
-            print_substep "Added TrustArc registry configuration"
-        fi
-
-        if [ "$has_auth" = false ]; then
-            echo "$auth_line" >> "$npmrc_file"
-            print_substep "Added authentication token configuration"
-        fi
-
-        rm -f "$npmrc_file.backup"
-        print_success "Updated .npmrc with TrustArc configuration"
-    else
-        # Create new .npmrc
+    if [ ! -f "$npmrc_file" ]; then
         print_info "Creating .npmrc file..."
-
-        cat > "$npmrc_file" << EOF
-$registry_line
-$auth_line
-EOF
-
-        print_success "Created .npmrc with TrustArc registry configuration"
+        : > "$npmrc_file"
+    else
+        print_info ".npmrc already exists — ensuring TrustArc settings are present"
     fi
+
+    ensure_npmrc_line "$npmrc_file" "^@trustarc:registry=" "$registry_line" "TrustArc registry configuration"
+    ensure_npmrc_line "$npmrc_file" "^//npm\.pkg\.github\.com/:_authToken=" "$auth_line" "authentication token configuration"
+    ensure_npmrc_line "$npmrc_file" "^legacy-peer-deps=" "$legacy_line" "legacy-peer-deps=true (npm peer resolution)"
+
+    print_success "TrustArc .npmrc configuration ensured"
 
     echo ""
     print_info ".npmrc Configuration:"
     print_substep "Registry: https://npm.pkg.github.com"
     print_substep "Auth Token: \${TRUSTARC_TOKEN} (from environment)"
+    print_substep "legacy-peer-deps: true (npm)"
 
     return 0
 }
@@ -104,17 +84,117 @@ detect_react_native_type() {
     return 1
 }
 
-# Detect package manager (npm or yarn)
+# Detect package manager from the project's lockfile (npm, yarn, pnpm, or bun)
 detect_package_manager() {
     local project_path=$1
 
-    if [ -f "$project_path/yarn.lock" ]; then
+    if [ -f "$project_path/bun.lockb" ] || [ -f "$project_path/bun.lock" ]; then
+        echo "bun"
+    elif [ -f "$project_path/pnpm-lock.yaml" ]; then
+        echo "pnpm"
+    elif [ -f "$project_path/yarn.lock" ]; then
         echo "yarn"
     elif [ -f "$project_path/package-lock.json" ]; then
         echo "npm"
     else
         echo "npm"  # Default to npm
     fi
+}
+
+# Return the package managers actually installed on this system (space-separated).
+get_installed_package_managers() {
+    local managers=""
+    command -v npm  >/dev/null 2>&1 && managers="$managers npm"
+    command -v yarn >/dev/null 2>&1 && managers="$managers yarn"
+    command -v pnpm >/dev/null 2>&1 && managers="$managers pnpm"
+    command -v bun  >/dev/null 2>&1 && managers="$managers bun"
+    echo "${managers# }"
+}
+
+# Interactively choose a package manager from those installed on the system,
+# defaulting to the one detected from the project's lockfile.
+# NOTE: all UI is written to stderr so only the chosen manager reaches stdout,
+# allowing this to be used in a command substitution: pm=$(choose_package_manager ...)
+choose_package_manager() {
+    local project_path=$1
+    local detected
+    detected=$(detect_package_manager "$project_path")
+
+    local -a pms
+    # shellcheck disable=SC2207
+    pms=($(get_installed_package_managers))
+
+    # Nothing detected as installed (very unlikely) — fall back to the lockfile guess.
+    if [ ${#pms[@]} -eq 0 ]; then
+        echo "$detected"
+        return 0
+    fi
+
+    # Only one manager installed — use it without prompting.
+    if [ ${#pms[@]} -eq 1 ]; then
+        echo "${pms[0]}"
+        return 0
+    fi
+
+    local default_index=1
+    {
+        echo ""
+        print_step "Select a package manager"
+        echo ""
+        print_info "Detected from lockfile: $detected"
+        if ! printf '%s\n' "${pms[@]}" | grep -qx "$detected"; then
+            print_warning "'$detected' is not installed on this system."
+        fi
+        echo ""
+        local i=1
+        local pm ver
+        for pm in "${pms[@]}"; do
+            ver=$("$pm" --version 2>/dev/null | head -1)
+            if [ "$pm" = "$detected" ]; then
+                echo "  ${i}) ${pm}${ver:+ ($ver)} [detected]"
+                default_index=$i
+            else
+                echo "  ${i}) ${pm}${ver:+ ($ver)}"
+            fi
+            i=$((i + 1))
+        done
+        echo ""
+    } >&2
+
+    local choice
+    read -p "Choose [1-${#pms[@]}] (default: $default_index): " choice
+    choice=${choice:-$default_index}
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#pms[@]} ]; then
+        print_warning "Invalid choice; using default." >&2
+        choice=$default_index
+    fi
+
+    echo "${pms[$((choice - 1))]}"
+}
+
+# Human-readable install command for a package manager (used in prompts/hints).
+# npm needs --legacy-peer-deps because its strict peer resolver (npm 7+) rejects
+# some valid React Native peer ranges; yarn/pnpm/bun do not.
+package_install_display() {
+    case "$1" in
+        npm) echo "npm install --legacy-peer-deps" ;;
+        *)   echo "$1 install" ;;
+    esac
+}
+
+# Run a dependency install using the given package manager.
+run_package_install() {
+    local package_manager=$1
+    local project_path=$2
+
+    cd "$project_path"
+    case "$package_manager" in
+        yarn) yarn install ;;
+        pnpm) pnpm install ;;
+        bun)  bun install ;;
+        *)    npm install --legacy-peer-deps ;;
+    esac
 }
 
 # Get React Native version from package.json
@@ -314,18 +394,20 @@ verify_android_integration() {
 }
 
 # Run Expo prebuild
+# $2 (optional): extra args to pass to `expo prebuild` (e.g. "--clean")
 run_expo_prebuild() {
     local project_path=$1
+    local extra_args="${2:-}"
 
     echo ""
-    print_step "Running Expo prebuild..."
+    print_step "Running Expo prebuild${extra_args:+ ($extra_args)}..."
     echo ""
     print_divider
     echo ""
 
     cd "$project_path"
 
-    if npx expo prebuild 2>&1; then
+    if npx expo prebuild $extra_args 2>&1; then
         echo ""
         print_success "Expo prebuild completed successfully"
         return 0
@@ -334,6 +416,185 @@ run_expo_prebuild() {
         print_error "Expo prebuild failed"
         return 1
     fi
+}
+
+# Install the expo-build-properties config plugin (required to inject the
+# TrustArc Android Maven repository and minSdkVersion during prebuild).
+install_expo_build_properties() {
+    local project_path=$1
+
+    echo ""
+    print_step "Installing expo-build-properties config plugin..."
+
+    if [ -d "$project_path/node_modules/expo-build-properties" ]; then
+        print_success "expo-build-properties already installed"
+        return 0
+    fi
+
+    cd "$project_path"
+    # `expo install` spawns its own `npm install`, which does not read our flag.
+    # Export npm_config_legacy_peer_deps so npm tolerates the SDK's react peer
+    # range mismatch (harmless for yarn/pnpm/bun).
+    if npm_config_legacy_peer_deps=true npx expo install expo-build-properties 2>&1; then
+        echo ""
+        print_success "Installed expo-build-properties"
+        return 0
+    else
+        echo ""
+        print_error "Failed to install expo-build-properties"
+        print_info "Install it manually: npm_config_legacy_peer_deps=true npx expo install expo-build-properties"
+        return 1
+    fi
+}
+
+# Print the manual Expo config snippet (used when we can't safely auto-edit
+# an existing dynamic config file).
+_print_expo_manual_config() {
+    echo ""
+    print_info "Add the following to your Expo config (app.config.js):"
+    echo ""
+    echo "  plugins: ["
+    echo "    ['expo-build-properties', {"
+    echo "      android: {"
+    echo "        minSdkVersion: 28,"
+    echo "        extraMavenRepos: [{"
+    echo "          url: 'https://maven.pkg.github.com/trustarc/trustarc-mobile-consent',"
+    echo "          credentials: { username: 'trustarc', password: process.env.TRUSTARC_TOKEN },"
+    echo "        }],"
+    echo "      },"
+    echo "    }],"
+    echo "  ],"
+    echo "  ios: {"
+    echo "    infoPlist: {"
+    echo "      NSUserTrackingUsageDescription:"
+    echo "        'This identifier will be used to deliver personalized ads to you.',"
+    echo "    },"
+    echo "  },"
+    echo ""
+}
+
+# Configure Expo native settings needed by the TrustArc SDK:
+#  - Android: TrustArc Maven repo + minSdkVersion 28 (via expo-build-properties)
+#  - iOS: NSUserTrackingUsageDescription
+# Uses a dynamic app.config.js (function form) so the GitHub token is read from
+# the TRUSTARC_TOKEN environment variable and never committed to source control.
+# The existing app.json is preserved and merged automatically by Expo.
+configure_expo_native_config() {
+    local project_path=$1
+    local app_config_js="$project_path/app.config.js"
+    local app_config_ts="$project_path/app.config.ts"
+    local app_json="$project_path/app.json"
+
+    echo ""
+    print_step "Configuring Expo native settings (Android Maven repo + iOS tracking)..."
+
+    # Never overwrite an existing dynamic config — show manual steps instead.
+    if [ -f "$app_config_ts" ]; then
+        print_warning "Found existing app.config.ts — not modifying it automatically."
+        _print_expo_manual_config
+        return 0
+    fi
+
+    if [ -f "$app_config_js" ]; then
+        if grep -q "Generated by the TrustArc Mobile Consent SDK CLI" "$app_config_js"; then
+            print_success "app.config.js already configured by TrustArc CLI"
+            return 0
+        fi
+        print_warning "Found existing app.config.js — not modifying it automatically."
+        _print_expo_manual_config
+        return 0
+    fi
+
+    if [ ! -f "$app_json" ]; then
+        print_warning "No app.json or app.config.js found in project root."
+        _print_expo_manual_config
+        return 0
+    fi
+
+    # Create app.config.js (function form). Expo reads app.json first and passes
+    # it in as `config`, so app.json stays as the source of static config.
+    cat > "$app_config_js" << 'EOF'
+// app.config.js
+// Generated by the TrustArc Mobile Consent SDK CLI.
+// Injects the TrustArc Android Maven repository and the iOS tracking usage
+// description required by the SDK. The GitHub token is read from the
+// TRUSTARC_TOKEN environment variable so it is never committed to source control.
+//
+// Your existing app.json is preserved: Expo loads it first and passes it in as
+// `config`, and this file layers the TrustArc settings on top.
+
+const TRUSTARC_MAVEN_URL =
+  'https://maven.pkg.github.com/trustarc/trustarc-mobile-consent';
+const TRUSTARC_TRACKING_DESCRIPTION =
+  'This identifier will be used to deliver personalized ads to you.';
+
+module.exports = ({ config }) => {
+  const plugins = [...(config.plugins || [])];
+
+  const trustArcRepo = {
+    url: TRUSTARC_MAVEN_URL,
+    credentials: {
+      username: 'trustarc',
+      password: process.env.TRUSTARC_TOKEN,
+    },
+  };
+
+  const existingIndex = plugins.findIndex(
+    (p) =>
+      p === 'expo-build-properties' ||
+      (Array.isArray(p) && p[0] === 'expo-build-properties')
+  );
+
+  if (existingIndex === -1) {
+    plugins.push([
+      'expo-build-properties',
+      { android: { minSdkVersion: 28, extraMavenRepos: [trustArcRepo] } },
+    ]);
+  } else {
+    // Merge into an existing expo-build-properties entry.
+    const existing = plugins[existingIndex];
+    const props = (Array.isArray(existing) && existing[1]) || {};
+    const android = props.android || {};
+    const repos = (android.extraMavenRepos || []).filter(
+      (r) => r.url !== TRUSTARC_MAVEN_URL
+    );
+    plugins[existingIndex] = [
+      'expo-build-properties',
+      {
+        ...props,
+        android: {
+          ...android,
+          minSdkVersion: Math.max(android.minSdkVersion || 0, 28),
+          extraMavenRepos: [...repos, trustArcRepo],
+        },
+      },
+    ];
+  }
+
+  const ios = config.ios || {};
+  const infoPlist = ios.infoPlist || {};
+
+  return {
+    ...config,
+    plugins,
+    ios: {
+      ...ios,
+      infoPlist: {
+        ...infoPlist,
+        NSUserTrackingUsageDescription:
+          infoPlist.NSUserTrackingUsageDescription ||
+          TRUSTARC_TRACKING_DESCRIPTION,
+      },
+    },
+  };
+};
+EOF
+
+    print_success "Created app.config.js (reads TRUSTARC_TOKEN from environment)"
+    print_substep "Android: Maven repo + minSdkVersion 28 via expo-build-properties"
+    print_substep "iOS: NSUserTrackingUsageDescription added"
+    print_info "Your existing app.json is preserved and merged automatically."
+    return 0
 }
 
 # Run pod install for iOS
@@ -357,6 +618,47 @@ run_pod_install() {
         print_error "Pod installation failed"
         return 1
     fi
+}
+
+# Add NSUserTrackingUsageDescription to the iOS Info.plist (bare React Native).
+# Expo projects get this via the generated app.config.js instead.
+add_ios_tracking_description() {
+    local project_path=$1
+    local desc="This identifier will be used to deliver personalized ads to you."
+
+    echo ""
+    print_step "Adding iOS tracking usage description (NSUserTrackingUsageDescription)..."
+
+    # Locate the app's Info.plist (exclude Pods and test targets).
+    local plist
+    plist=$(find "$project_path/ios" -name "Info.plist" -not -path "*/Pods/*" -not -path "*Tests*" 2>/dev/null | head -1)
+
+    if [ -z "$plist" ]; then
+        print_warning "Could not locate ios/<AppName>/Info.plist"
+        print_info "Add this key manually to your Info.plist:"
+        echo "  <key>NSUserTrackingUsageDescription</key>"
+        echo "  <string>$desc</string>"
+        return 0
+    fi
+
+    local plistbuddy="/usr/libexec/PlistBuddy"
+    if [ ! -x "$plistbuddy" ]; then
+        print_warning "PlistBuddy not available; add the key manually to: $plist"
+        echo "  <key>NSUserTrackingUsageDescription</key>"
+        echo "  <string>$desc</string>"
+        return 0
+    fi
+
+    if "$plistbuddy" -c "Print :NSUserTrackingUsageDescription" "$plist" >/dev/null 2>&1; then
+        print_success "NSUserTrackingUsageDescription already present"
+    elif "$plistbuddy" -c "Add :NSUserTrackingUsageDescription string $desc" "$plist" >/dev/null 2>&1; then
+        print_success "Added NSUserTrackingUsageDescription to $(basename "$(dirname "$plist")")/Info.plist"
+    else
+        print_warning "Could not update Info.plist automatically; add manually to $plist:"
+        echo "  <key>NSUserTrackingUsageDescription</key>"
+        echo "  <string>$desc</string>"
+    fi
+    return 0
 }
 
 # Detect if project uses TypeScript
@@ -710,22 +1012,21 @@ integrate_react_native_sdk() {
         fi
 
         # Step 5: Install dependencies
+        # Let the user pick from the package managers installed on their system
+        # (defaults to the one detected from the lockfile).
+        package_manager=$(choose_package_manager "$project_path")
+        local install_cmd
+        install_cmd=$(package_install_display "$package_manager")
+
         echo ""
-        read -p "Run $package_manager install now? (y/n): " install_choice
+        read -p "Run '$install_cmd' now? (y/n): " install_choice
 
         if [ "$install_choice" = "y" ] || [ "$install_choice" = "Y" ]; then
             echo ""
-            print_step "Installing dependencies..."
+            print_step "Installing dependencies with $package_manager..."
             echo ""
 
-            cd "$project_path"
-            if [ "$package_manager" = "yarn" ]; then
-                yarn install
-            else
-                npm install
-            fi
-
-            if [ $? -eq 0 ]; then
+            if run_package_install "$package_manager" "$project_path"; then
                 echo ""
                 print_success "Dependencies installed successfully"
             else
@@ -736,13 +1037,19 @@ integrate_react_native_sdk() {
         else
             echo ""
             print_warning "Skipping dependency installation"
-            print_info "Please run '$package_manager install' manually"
+            print_info "Please run '$install_cmd' manually"
         fi
     fi
 
     # Step 6: Platform-specific integration
     if [ "$project_type" = "expo" ]; then
         # EXPO FLOW
+
+        # Install the config plugin and write the native config BEFORE prebuild,
+        # otherwise the Android build cannot resolve the TrustArc Maven package.
+        install_expo_build_properties "$project_path"
+        configure_expo_native_config "$project_path"
+
         echo ""
         print_divider
         echo ""
@@ -754,15 +1061,18 @@ integrate_react_native_sdk() {
         print_step "This process will:"
         print_substep "✓ Generate native iOS project with CocoaPods"
         print_substep "✓ Generate native Android project with Gradle"
+        print_substep "✓ Apply the TrustArc Maven repo + minSdkVersion (expo-build-properties)"
         print_substep "✓ Auto-link TrustArc SDK native modules"
         echo ""
-        print_warning "⚠ WARNING: This will regenerate ios/ and android/ directories"
+        print_warning "⚠ WARNING: '--clean' regenerates ios/ and android/ directories"
         print_warning "          Any manual native changes will be lost!"
         echo ""
-        read -p "Run 'npx expo prebuild' now? (y/n): " prebuild_choice
+        print_info "Ensure TRUSTARC_TOKEN is exported in this shell (Maven auth reads it)."
+        echo ""
+        read -p "Run 'npx expo prebuild --clean' now? (y/n): " prebuild_choice
 
         if [ "$prebuild_choice" = "y" ] || [ "$prebuild_choice" = "Y" ]; then
-            if run_expo_prebuild "$project_path"; then
+            if run_expo_prebuild "$project_path" "--clean"; then
                 echo ""
                 print_info "Verifying prebuild results..."
 
@@ -785,7 +1095,7 @@ integrate_react_native_sdk() {
             echo ""
             print_info "Please run manually when ready:"
             echo "  cd $project_path"
-            echo "  npx expo prebuild"
+            echo "  npx expo prebuild --clean"
             echo ""
             read -p "Press Enter when prebuild is complete..."
         fi
@@ -831,6 +1141,19 @@ integrate_react_native_sdk() {
             fi
         fi
 
+        # Android Studio guidance: prebuild bakes the token into the project's
+        # android/gradle.properties, so terminal builds authenticate fine. GUI
+        # Android Studio does not inherit the shell env, so if Gradle needs to
+        # re-fetch the dependency it can 401.
+        echo ""
+        print_divider
+        echo ""
+        print_info "Running from Android Studio? (optional)"
+        print_substep "Terminal builds (npx expo run:android) work out of the box."
+        print_substep "For Android Studio, do ONE of the following so Gradle can authenticate:"
+        print_substep "  • Run 'npx expo run:android' once (with TRUSTARC_TOKEN exported) to cache the dependency, or"
+        print_substep "  • Add 'TRUSTARC_TOKEN=<token>' to ~/.gradle/gradle.properties"
+
     else
         # BARE METAL FLOW
         echo ""
@@ -846,6 +1169,9 @@ integrate_react_native_sdk() {
             if grep -q "use_native_modules!" "$project_path/ios/Podfile"; then
                 print_substep "✓ Auto-linking enabled (use_native_modules!)"
             fi
+
+            # Add the iOS tracking usage description required by the SDK.
+            add_ios_tracking_description "$project_path"
 
             echo ""
             print_info "Native modules have been updated in package.json"
