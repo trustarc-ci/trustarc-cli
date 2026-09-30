@@ -133,7 +133,7 @@ class TrustArcConsentImpl: ObservableObject {
             _ = TrustArc.sharedInstance.setDomain(domain)
             _ = TrustArc.sharedInstance.setMode(sdkMode)
             _ = TrustArc.sharedInstance.enableAppTrackingTransparencyPrompt(enableATT)
-            _ = TrustArc.sharedInstance.enableDebugLogs(enableDebugLogs)
+            _ = TrustArc.sharedInstance.enableDebugLog(enableDebugLogs)
 
             // Start the SDK with completion callback
             TrustArc.sharedInstance.start { shouldShowConsentUI in

@@ -29,6 +29,7 @@ class TrustArcConsentImpl {
     this.consentChangeListeners = [];
     this.googleConsentChangeListeners = [];
     this.sdkInitListeners = [];
+    this.eventSubscriptions = [];
     this.isInitialized = false;
     this.isReady = false;
 
@@ -67,29 +68,35 @@ class TrustArcConsentImpl {
    */
   setupEventListeners() {
     // Listen for consent changes
-    this.eventEmitter.addListener('onConsentChanges', (data) => {
-      if (this.ENABLE_DEBUG_LOGS) {
-        console.log('[TrustArc] Consent data changed:', data);
-      }
-      this.consentChangeListeners.forEach((listener) => listener(data));
-    });
+    this.eventSubscriptions.push(
+      this.eventEmitter.addListener('onConsentChanges', (data) => {
+        if (this.ENABLE_DEBUG_LOGS) {
+          console.log('[TrustArc] Consent data changed:', data);
+        }
+        this.consentChangeListeners.forEach((listener) => listener(data));
+      })
+    );
 
     // Listen for Google consent changes
-    this.eventEmitter.addListener('onGoogleConsentChanges', (data) => {
-      if (this.ENABLE_DEBUG_LOGS) {
-        console.log('[TrustArc] Google consent data changed:', data);
-      }
-      this.googleConsentChangeListeners.forEach((listener) => listener(data));
-    });
+    this.eventSubscriptions.push(
+      this.eventEmitter.addListener('onGoogleConsentChanges', (data) => {
+        if (this.ENABLE_DEBUG_LOGS) {
+          console.log('[TrustArc] Google consent data changed:', data);
+        }
+        this.googleConsentChangeListeners.forEach((listener) => listener(data));
+      })
+    );
 
     // Listen for SDK initialization completion
-    this.eventEmitter.addListener('onSdkInitFinish', () => {
-      if (this.ENABLE_DEBUG_LOGS) {
-        console.log('[TrustArc] SDK initialization finished');
-      }
-      this.isReady = true;
-      this.sdkInitListeners.forEach((listener) => listener());
-    });
+    this.eventSubscriptions.push(
+      this.eventEmitter.addListener('onSdkInitFinish', () => {
+        if (this.ENABLE_DEBUG_LOGS) {
+          console.log('[TrustArc] SDK initialization finished');
+        }
+        this.isReady = true;
+        this.sdkInitListeners.forEach((listener) => listener());
+      })
+    );
   }
 
   /**
@@ -451,9 +458,8 @@ class TrustArcConsentImpl {
    * Call this when your app is being destroyed
    */
   cleanup() {
-    this.eventEmitter.removeAllListeners('onConsentChanges');
-    this.eventEmitter.removeAllListeners('onGoogleConsentChanges');
-    this.eventEmitter.removeAllListeners('onSdkInitFinish');
+    this.eventSubscriptions.forEach((subscription) => subscription.remove());
+    this.eventSubscriptions = [];
     this.consentChangeListeners = [];
     this.googleConsentChangeListeners = [];
     this.sdkInitListeners = [];
