@@ -4,6 +4,11 @@
 # Usage: bash -c "$(curl -fsSL https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh)"
 #    or: bash -c "$(wget https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/heads/main/install.sh -O -)"
 
+if [ -z "${BASH_VERSION:-}" ]; then
+    echo "Error: This installer requires Bash. Run it with bash instead of sh." >&2
+    exit 1
+fi
+
 set -e
 
 # Clean up any old temp directories from previous runs
@@ -71,39 +76,44 @@ load_module() {
     local attempt=1
     local delay=2
 
+    echo "[INFO] Downloading module: ${module_name}"
     while [ $attempt -le $max_attempts ]; do
         local http_status=0
+        local download_status=0
         if command -v curl >/dev/null 2>&1; then
             local auth_args=()
             [ -n "$_RAW_AUTH_TOKEN" ] && auth_args=(-H "Authorization: token ${_RAW_AUTH_TOKEN}")
+            # Handle failures explicitly so set -e does not bypass retries.
             http_status=$(curl -fsSL --retry 0 -w "%{http_code}" \
                 "${auth_args[@]}" \
-                "$module_url" -o "$local_module" 2>/dev/null)
+                "$module_url" -o "$local_module") || download_status=$?
         elif command -v wget >/dev/null 2>&1; then
             local auth_header=""
             [ -n "$_RAW_AUTH_TOKEN" ] && auth_header="--header=Authorization: token ${_RAW_AUTH_TOKEN}"
-            wget -q ${auth_header:+"$auth_header"} "$module_url" -O "$local_module" 2>/dev/null
-            http_status=$?
+            wget -nv ${auth_header:+"$auth_header"} "$module_url" -O "$local_module" || download_status=$?
             # wget exits 0 on success; map to pseudo HTTP code for uniform handling
-            [ "$http_status" = "0" ] && http_status=200 || http_status=500
+            [ "$download_status" = "0" ] && http_status=200 || http_status=500
         else
             echo "Error: Neither curl nor wget is available. Please install one of them."
             exit 1
         fi
 
-        if [ -s "$local_module" ] && [ "$http_status" != "429" ]; then
+        if [ "$download_status" = "0" ] && [ -s "$local_module" ] && [[ "$http_status" == 2?? ]]; then
             break
         fi
 
         if [ "$http_status" = "429" ]; then
-            echo "[WARN] GitHub rate limit hit fetching ${module_name} (attempt ${attempt}/${max_attempts}). Retrying in ${delay}s..."
+            echo "[WARN] GitHub rate limit hit fetching ${module_name} (attempt ${attempt}/${max_attempts})." >&2
         else
-            echo "[WARN] Failed to download ${module_name} (attempt ${attempt}/${max_attempts}). Retrying in ${delay}s..."
+            echo "[WARN] Failed to download ${module_name} (attempt ${attempt}/${max_attempts}, HTTP ${http_status}, exit ${download_status})." >&2
         fi
 
         rm -f "$local_module"
         attempt=$((attempt + 1))
-        [ $attempt -le $max_attempts ] && sleep $delay
+        if [ $attempt -le $max_attempts ]; then
+            echo "[INFO] Retrying in ${delay}s..." >&2
+            sleep $delay
+        fi
         delay=$((delay * 2))
     done
 
@@ -140,7 +150,7 @@ load_module "menu"
 
 # Main installation flow
 main() {
-    clear
+    clear || true
     print_header "TrustArc Mobile Consent SDK Configurator 1.2"
     if [ "$USE_LOCAL_MODULES" = "1" ]; then
         print_warning "Using local modules (TRUSTARC_USE_LOCAL_MODULES=1). They may be out of date."
