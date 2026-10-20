@@ -20,6 +20,9 @@ mock_download() {
     local output=""
     while [ "$#" -gt 0 ]; do
         case "$1" in
+            *Authorization*)
+                echo "Public module request must not send an authorization header" >&2
+                exit 90 ;;
             -o|-O) output="$2"; shift ;;
         esac
         shift
@@ -81,10 +84,11 @@ class InstallerDownloadsTest(unittest.TestCase):
                 "CLIENT": client,
                 "OUTCOME": outcome,
                 "RECOVER": "1" if recover else "0",
+                "TRUSTARC_TOKEN": "invalid-test-token",
             }
             script = (
                 "set -e\n"
-                'USE_LOCAL_MODULES=0\n_RAW_AUTH_TOKEN=""\n'
+                'USE_LOCAL_MODULES=0\n_RAW_AUTH_TOKEN="$TRUSTARC_TOKEN"\n'
                 'REPO_REF=main\n'
                 'REPO_BASE_URL=https://example.invalid\n'
                 'TMP_LIB_DIR="$TEST_DIR/modules"\n'

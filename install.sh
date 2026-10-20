@@ -49,10 +49,6 @@ REPO_BASE_URL="https://raw.githubusercontent.com/trustarc-ci/trustarc-cli/refs/h
 # Set TRUSTARC_USE_LOCAL_MODULES=1 to use local files during development.
 USE_LOCAL_MODULES="${TRUSTARC_USE_LOCAL_MODULES:-0}"
 
-# Auth token for GitHub raw content (reduces rate limiting from IP-based to token-based limits).
-# Uses TRUSTARC_TOKEN if set in the environment before running the installer.
-_RAW_AUTH_TOKEN="${TRUSTARC_TOKEN:-}"
-
 # Temporary directory for downloaded modules
 TMP_LIB_DIR="/tmp/trustarc-cli-lib-$$"
 
@@ -82,17 +78,14 @@ load_module() {
     while [ $attempt -le $max_attempts ]; do
         local http_status=0
         local download_status=0
+        # CLI modules are public. An invalid SDK token can cause GitHub raw
+        # content to return 404 even when the public module exists.
         if command -v curl >/dev/null 2>&1; then
-            local auth_args=()
-            [ -n "$_RAW_AUTH_TOKEN" ] && auth_args=(-H "Authorization: token ${_RAW_AUTH_TOKEN}")
             # Handle failures explicitly so set -e does not bypass retries.
             http_status=$(curl -fsSL --retry 0 -w "%{http_code}" \
-                "${auth_args[@]}" \
                 "$module_url" -o "$local_module") || download_status=$?
         elif command -v wget >/dev/null 2>&1; then
-            local auth_header=""
-            [ -n "$_RAW_AUTH_TOKEN" ] && auth_header="--header=Authorization: token ${_RAW_AUTH_TOKEN}"
-            wget -nv ${auth_header:+"$auth_header"} "$module_url" -O "$local_module" || download_status=$?
+            wget -nv "$module_url" -O "$local_module" || download_status=$?
             # wget exits 0 on success; map to pseudo HTTP code for uniform handling
             [ "$download_status" = "0" ] && http_status=200 || http_status=500
         else
@@ -131,7 +124,7 @@ load_module() {
         source "$local_module"
     else
         echo "Error: Failed to download module after ${max_attempts} attempts: $module_name"
-        echo "Tip: set TRUSTARC_TOKEN in your environment to avoid GitHub rate limits."
+        echo "Check your network connection and CLI ref. If GitHub is rate limiting requests, try again later."
         exit 1
     fi
 }
