@@ -45,6 +45,10 @@ mock_download() {
             [ "$CLIENT" != curl ] || printf 429
             echo "mock: rate limited" >&2
             return 22 ;;
+        not_found)
+            echo 'echo INVALID_MODULE_SOURCED' > "$output"
+            printf 404
+            return 22 ;;
         partial)
             echo 'echo INVALID_MODULE_SOURCED' > "$output"
             [ "$CLIENT" != curl ] || printf 200
@@ -81,6 +85,7 @@ class InstallerDownloadsTest(unittest.TestCase):
             script = (
                 "set -e\n"
                 'USE_LOCAL_MODULES=0\n_RAW_AUTH_TOKEN=""\n'
+                'REPO_REF=main\n'
                 'REPO_BASE_URL=https://example.invalid\n'
                 'TMP_LIB_DIR="$TEST_DIR/modules"\n'
                 + MOCKS
@@ -99,6 +104,16 @@ class InstallerDownloadsTest(unittest.TestCase):
             delays = delays_file.read_text().splitlines() if delays_file.exists() else []
             module_exists = (Path(directory) / "modules/utils.sh").exists()
         return result, attempts, delays, module_exists
+
+    def test_missing_module_fails_immediately_with_url(self):
+        result, attempts, delays, exists = self.run_download("curl", "not_found")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(attempts, 1)
+        self.assertEqual(delays, [])
+        self.assertFalse(exists)
+        self.assertIn("https://example.invalid/lib/utils.sh", result.stderr)
+        self.assertIn("REPO_REF=main", result.stderr)
+        self.assertNotIn("MODULE_SOURCED", result.stdout)
 
     def test_success(self):
         for client in ("curl", "wget"):
@@ -137,6 +152,37 @@ class InstallerDownloadsTest(unittest.TestCase):
                     self.assertEqual(delays, ["2"])
                     self.assertIn("MODULE_SOURCED\nLOADER_FINISHED", result.stdout)
                     self.assertNotIn("INVALID_MODULE_SOURCED", result.stdout)
+
+
+class InstallerRefTest(unittest.TestCase):
+    def test_cli_and_sample_refs(self):
+        selection = SOURCE.split("# GitHub repository base URL", 1)[1].split(
+            "# By default, always fetch", 1
+        )[0]
+        selection = "# GitHub repository base URL" + selection
+        samples = (INSTALLER.parent / "lib/download.sh").read_text().split(
+            "sample_repo_archive_url()", 1
+        )[0]
+        cases = [
+            ({}, "main", "release"),
+            ({"TRUSTARC_REF": "release"}, "main", "release"),
+            ({"TRUSTARC_REF": "v2.0.0"}, "main", "v2.0.0"),
+            ({"TRUSTARC_REF": "testing"}, "testing", "testing"),
+            ({"TRUSTARC_REF": "main"}, "main", "main"),
+            ({"TRUSTARC_REF": "release", "TRUSTARC_CLI_REF": "testing"}, "testing", "release"),
+            ({"CLI_VERSION": "testing"}, "testing", "testing"),
+            ({"REPO_REF": "custom", "TRUSTARC_CLI_REF": "testing"}, "custom", "custom"),
+        ]
+        for variables, cli_ref, sample_ref in cases:
+            with self.subTest(variables=variables):
+                result = subprocess.run(
+                    ["/bin/bash", "-c", "set -e\n" + selection + samples
+                     + '\nprintf "%s\\n%s\\n" "$REPO_REF" "$SAMPLE_REPO_BRANCH"'],
+                    env={"PATH": os.environ["PATH"], **variables},
+                    capture_output=True, text=True, timeout=10,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), [cli_ref, sample_ref])
 
 
 if __name__ == "__main__":

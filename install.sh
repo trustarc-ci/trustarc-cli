@@ -20,7 +20,8 @@ rm -rf /tmp/trustarc-boilerplate-* 2>/dev/null || true
 # 1) REPO_REF (explicit)
 # 2) TRUSTARC_CLI_REF (explicit)
 # 3) CLI_VERSION (explicit)
-# 4) TRUSTARC_REF (only: testing/main/release; any other value falls back to testing)
+# 4) TRUSTARC_REF (testing/main select matching CLI branches;
+#    SDK release/version refs use main)
 # 5) main (default)
 REPO_REF_IS_DEFAULT=0
 if [ -n "${REPO_REF:-}" ]; then
@@ -31,11 +32,12 @@ elif [ -n "${CLI_VERSION:-}" ]; then
     REPO_REF="$CLI_VERSION"
 elif [ -n "${TRUSTARC_REF:-}" ]; then
     case "$TRUSTARC_REF" in
-        testing|main|release)
+        testing|main)
             REPO_REF="$TRUSTARC_REF"
             ;;
         *)
-            REPO_REF="testing"
+            REPO_REF="main"
+            REPO_REF_IS_DEFAULT=1
             ;;
     esac
 else
@@ -76,7 +78,7 @@ load_module() {
     local attempt=1
     local delay=2
 
-    echo "[INFO] Downloading module: ${module_name}"
+    echo "[INFO] Downloading module: ${module_name} (CLI ref: ${REPO_REF})"
     while [ $attempt -le $max_attempts ]; do
         local http_status=0
         local download_status=0
@@ -100,6 +102,13 @@ load_module() {
 
         if [ "$download_status" = "0" ] && [ -s "$local_module" ] && [[ "$http_status" == 2?? ]]; then
             break
+        fi
+
+        if [ "$http_status" = "404" ]; then
+            rm -f "$local_module"
+            echo "Error: CLI module not found: ${module_url}" >&2
+            echo "Check REPO_REF, TRUSTARC_CLI_REF, and CLI_VERSION. To use the default CLI branch, run with REPO_REF=main." >&2
+            exit 1
         fi
 
         if [ "$http_status" = "429" ]; then
