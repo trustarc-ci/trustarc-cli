@@ -345,7 +345,10 @@ download_sample_menu() {
     printf "  ${BOLD}6${NC}) Flutter\n"
     printf "  ${BOLD}7${NC}) Android (v2 · TrustArcWeb)\n"
     printf "  ${BOLD}8${NC}) iOS (v2 · TrustArcWeb)\n"
-    printf "  ${BOLD}9${NC}) Back to main menu\n"
+    printf "  ${BOLD}9${NC}) React Native Expo (v2 · TrustArcWeb)\n"
+    printf "  ${BOLD}10${NC}) React Native Bare Metal (v2 · TrustArcWeb)\n"
+    printf "  ${BOLD}11${NC}) Flutter (v2 · TrustArcWeb)\n"
+    printf "  ${BOLD}12${NC}) Back to main menu\n"
     echo ""
 
     local default_platform_choice=""
@@ -358,13 +361,16 @@ download_sample_menu() {
         flutter) default_platform_choice="6" ;;
         android-v2) default_platform_choice="7" ;;
         ios-v2) default_platform_choice="8" ;;
+        react-native-v2) default_platform_choice="9" ;;
+        react-native-baremetal-v2) default_platform_choice="10" ;;
+        flutter-v2) default_platform_choice="11" ;;
     esac
 
     if [ -n "$default_platform_choice" ]; then
-        read -p "Enter your choice (1-9, default: $default_platform_choice): " platform_choice
+        read -p "Enter your choice (1-12, default: $default_platform_choice): " platform_choice
         platform_choice=${platform_choice:-$default_platform_choice}
     else
-        read -p "Enter your choice (1-9): " platform_choice
+        read -p "Enter your choice (1-12): " platform_choice
     fi
 
     local platform=""
@@ -377,7 +383,10 @@ download_sample_menu() {
         6) platform="flutter" ;;
         7) platform="android-v2" ;;
         8) platform="ios-v2" ;;
-        9) show_main_menu; return ;;
+        9) platform="react-native-v2" ;;
+        10) platform="react-native-baremetal-v2" ;;
+        11) platform="flutter-v2" ;;
+        12) show_main_menu; return ;;
         *) print_error "Invalid choice"; download_sample_menu; return ;;
     esac
 
@@ -401,7 +410,7 @@ download_sample_menu() {
 
     # Website config only applies to the v1 demos — the v2 apps have no testWebsiteUrl.
     case "$platform" in
-        android-v2|ios-v2)
+        android-v2|ios-v2|react-native-v2|react-native-baremetal-v2|flutter-v2)
             : # v2 has no website config; skip the website prompt
             ;;
         *)

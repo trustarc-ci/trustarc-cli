@@ -184,7 +184,7 @@ filter_tags_for_platform_stream() {
 
     case "$platform" in
         ios|ios-spm|ios-v2) platform_key="ios" ;;
-        flutter) platform_key="flutter" ;;
+        flutter|flutter-v2) platform_key="flutter" ;;
         *) cat; return 0 ;;
     esac
 
@@ -224,7 +224,7 @@ list_sample_sdk_versions() {
             artifact=$(android_artifact_for_stream "$stream") || return 1
             fetch_android_sdk_versions_for_artifact "$artifact" | head -20
             ;;
-        react-native|react-native-baremetal)
+        react-native|react-native-baremetal|react-native-v2|react-native-baremetal-v2)
             package_name=$(react_package_for_stream "$stream") || return 1
             if [ "$stream" = "stable" ]; then
                 fetch_npm_package_versions "$package_name" | filter_stable_2026_01_versions | sort -Vr | head -20
@@ -232,7 +232,7 @@ list_sample_sdk_versions() {
                 fetch_npm_package_versions "$package_name" | sort -Vr | head -20
             fi
             ;;
-        ios|ios-spm|ios-v2|flutter)
+        ios|ios-spm|ios-v2|flutter|flutter-v2)
             fetch_repo_tags "trustarc/trustarc-mobile-consent" | filter_tags_for_platform_stream "$platform" "$stream" | sort -Vr | head -5
             ;;
         *)
@@ -356,7 +356,7 @@ select_sample_sdk_stream() {
             save_config "ANDROID_SAMPLE_SDK_ENV" "$env"
             save_config "ANDROID_SAMPLE_SDK_VERSION" "$selected_version"
             ;;
-        react-native|react-native-baremetal)
+        react-native|react-native-baremetal|react-native-v2|react-native-baremetal-v2)
             package_name=$(react_package_for_stream "$stream")
             REACT_SAMPLE_SDK_ENV="$env"
             if [ "$stream" = "current" ] || [ "$stream" = "stable" ]; then
@@ -373,7 +373,7 @@ select_sample_sdk_stream() {
             IOS_SAMPLE_SDK_VERSION="$selected_version"
             save_config "IOS_SAMPLE_SDK_VERSION" "$selected_version"
             ;;
-        flutter)
+        flutter|flutter-v2)
             FLUTTER_SAMPLE_SDK_VERSION="$selected_version"
             save_config "FLUTTER_SAMPLE_SDK_VERSION" "$selected_version"
             ;;
@@ -426,6 +426,9 @@ check_platform_dependencies() {
     case "$platform" in
         "ios-v2") platform="ios" ;;
         "android-v2") platform="android" ;;
+        "react-native-v2") platform="react-native" ;;
+        "react-native-baremetal-v2") platform="react-native-baremetal" ;;
+        "flutter-v2") platform="flutter" ;;
     esac
 
     case "$platform" in
@@ -989,6 +992,18 @@ download_sample_app() {
         "ios-v2")
             platform_type="ios-v2"
             platform_dir="v2/ios"
+            ;;
+        "react-native-v2")
+            platform_type="react-native-v2"
+            platform_dir="v2/react"
+            ;;
+        "react-native-baremetal-v2")
+            platform_type="react-native-baremetal-v2"
+            platform_dir="v2/react-baremetal"
+            ;;
+        "flutter-v2")
+            platform_type="flutter-v2"
+            platform_dir="v2/flutter"
             ;;
     esac
 
