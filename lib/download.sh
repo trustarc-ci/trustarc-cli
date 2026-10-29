@@ -935,6 +935,77 @@ update_config_files() {
                 fi
             fi
             ;;
+
+        "flutter-v2")
+            # v2 demo seeds the domain from an in-app AppConfig constant in lib/main.dart.
+            local v2_flutter_main="$app_dir/lib/main.dart"
+            if [ -n "$domain" ] && [ -f "$v2_flutter_main" ]; then
+                sed -E -i.bak "s|(static const domain = ')[^']*(')|\1$escaped_domain\2|" "$v2_flutter_main"
+                rm -f "${v2_flutter_main}.bak"
+                print_success "Updated Flutter v2 default domain: $domain"
+            elif [ ! -f "$v2_flutter_main" ]; then
+                print_warning "Flutter v2 lib/main.dart not found; skipped default domain override"
+            fi
+
+            # The v2 wrapper (TrustArcWeb) is a git dependency on ccm-flutter-mobile-consent-sdk;
+            # the native SDK is bundled by the wrapper. Patch the pubspec git ref to the selected
+            # version (product repos share the 2610.x tag scheme), keeping the committed ref otherwise.
+            local v2_flutter_pubspec="$app_dir/pubspec.yaml"
+            if [ -f "$v2_flutter_pubspec" ] && [ -n "$TRUSTARC_TOKEN" ]; then
+                sed -i.bak "s|YOUR_TRUSTARC_TOKEN|$escaped_token|g" "$v2_flutter_pubspec"
+                rm -f "${v2_flutter_pubspec}.bak"
+            fi
+            if [ -n "$flutter_sdk_ver" ] && [ -f "$v2_flutter_pubspec" ]; then
+                local escaped_v2_flutter_ver
+                escaped_v2_flutter_ver=$(sed_escape_replacement "$flutter_sdk_ver")
+                sed -i.bak "s|^[[:space:]]*ref:[[:space:]].*|      ref: $escaped_v2_flutter_ver|g" "$v2_flutter_pubspec"
+                rm -f "${v2_flutter_pubspec}.bak"
+                print_success "Updated Flutter v2 wrapper ref: $flutter_sdk_ver"
+            fi
+            ;;
+
+        "react-native-v2"|"react-native-baremetal-v2")
+            # v2 demo seeds the domain from an in-app AppConfig object: Expo in app/index.tsx,
+            # bare metal in App.tsx.
+            local v2_rn_domain_file=""
+            if [ -f "$app_dir/app/index.tsx" ]; then
+                v2_rn_domain_file="$app_dir/app/index.tsx"
+            elif [ -f "$app_dir/App.tsx" ]; then
+                v2_rn_domain_file="$app_dir/App.tsx"
+            fi
+            if [ -n "$domain" ] && [ -n "$v2_rn_domain_file" ]; then
+                sed -E -i.bak "s|(domain: ')[^']*(')|\1$escaped_domain\2|" "$v2_rn_domain_file"
+                rm -f "${v2_rn_domain_file}.bak"
+                print_success "Updated React Native v2 default domain: $domain"
+            else
+                print_warning "React Native v2 domain file (app/index.tsx or App.tsx) not found; skipped domain override"
+            fi
+
+            # Token for Android Maven creds (app.json) and the iOS Podfile, if placeholders exist.
+            local v2_rn_appjson="$app_dir/app.json"
+            if [ -f "$v2_rn_appjson" ] && [ -n "$TRUSTARC_TOKEN" ]; then
+                sed -i.bak "s|YOUR_TRUSTARC_TOKEN|$escaped_token|g" "$v2_rn_appjson"
+                rm -f "${v2_rn_appjson}.bak"
+            fi
+            local v2_rn_podfile="$app_dir/ios/Podfile"
+            if [ -f "$v2_rn_podfile" ] && [ -n "$TRUSTARC_TOKEN" ]; then
+                sed -i.bak "s|YOUR_TRUSTARC_TOKEN|$escaped_token|g" "$v2_rn_podfile"
+                rm -f "${v2_rn_podfile}.bak"
+            fi
+
+            # SDK package version — TrustArcWeb ships in the published package. rn_sdk_ver may be
+            # a plain version or an "npm:<pkg>@<version>" alias.
+            if [ -n "$rn_sdk_ver" ]; then
+                local v2_rn_pkg="$app_dir/package.json"
+                if [ -f "$v2_rn_pkg" ]; then
+                    sed -i.bak "s|\"@trustarc/trustarc-react-native-consent-sdk\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"@trustarc/trustarc-react-native-consent-sdk\": \"$rn_sdk_ver\"|g" "$v2_rn_pkg"
+                    rm -f "${v2_rn_pkg}.bak"
+                    print_success "Updated React Native v2 SDK version: $rn_sdk_ver"
+                else
+                    print_warning "React Native v2 package.json not found; skipped SDK version override"
+                fi
+            fi
+            ;;
     esac
 
     echo ""
